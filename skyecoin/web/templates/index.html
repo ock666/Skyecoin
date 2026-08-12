@@ -11,10 +11,10 @@
 <body>
     <header>
         <h1><span class="icon">🐍</span> Skyecoin Explorer</h1>
-        <span class="node-info">v2.0.0</span>
+        <span class="node-info" id="ws-status">v2.0.0</span>
     </header>
 
-    <div class="stats-bar" id="stats-bar" hx-get="/views/stats" hx-trigger="every 5s" hx-swap="innerHTML">
+    <div class="stats-bar" id="stats-bar">
         {% include "partials/stats.html" %}
     </div>
 
@@ -37,9 +37,12 @@
         <!-- Dashboard -->
         <div id="tab-dashboard" class="tab-content active">
             <div id="dashboard-detail"></div>
+            <div id="mining-visualizer">
+                {% include "partials/mining.html" %}
+            </div>
             <div class="card">
                 <h2>📊 Recent Blocks</h2>
-                <div hx-get="/views/blocks?limit=10" hx-trigger="every 10s" hx-swap="innerHTML">
+                <div id="recent-blocks">
                     {% include "partials/block_list.html" %}
                 </div>
             </div>
@@ -56,7 +59,7 @@
                 </div>
                 <div id="block-detail"></div>
                 <h3 style="margin-top: 20px;">All Blocks</h3>
-                <div hx-get="/views/blocks?limit=20" hx-trigger="every 15s" hx-swap="innerHTML" id="all-blocks">
+                <div id="all-blocks">
                     {% include "partials/block_list.html" %}
                 </div>
             </div>
@@ -66,7 +69,7 @@
         <div id="tab-mempool" class="tab-content">
             <div class="card">
                 <h2>📝 Pending Transactions</h2>
-                <div hx-get="/views/mempool" hx-trigger="every 5s" hx-swap="innerHTML" id="mempool-content">
+                <div id="mempool-content">
                     {% include "partials/mempool.html" %}
                 </div>
             </div>
@@ -117,7 +120,7 @@
 
             <div class="card">
                 <h2>📜 Transaction History</h2>
-                <div hx-get="/views/history/{{ wallet.address }}?limit=20" hx-trigger="every 15s" hx-swap="innerHTML" id="wallet-history">
+                <div id="wallet-history" hx-get="/views/history/{{ wallet.address }}?limit=20" hx-trigger="every 30s" hx-swap="innerHTML">
                     {% include "partials/history.html" %}
                 </div>
             </div>
@@ -133,7 +136,7 @@
                     <button hx-post="/api/peers/resolve" hx-target="#peer-result" hx-swap="innerHTML" class="secondary">Resolve Conflicts</button>
                 </div>
                 <div id="peer-result"></div>
-                <div hx-get="/views/peers" hx-trigger="every 10s" hx-swap="innerHTML" id="peers-list">
+                <div id="peers-list">
                     {% include "partials/peers.html" %}
                 </div>
             </div>
@@ -144,9 +147,7 @@
             <div class="card">
                 <h2>📡 REST API Endpoints</h2>
                 <table>
-                    <thead>
-                        <tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
-                    </thead>
+                    <thead><tr><th>Method</th><th>Endpoint</th><th>Description</th></tr></thead>
                     <tbody>
                         <tr><td>GET</td><td><code>/api/stats</code></td><td>Chain statistics</td></tr>
                         <tr><td>GET</td><td><code>/api/chain?limit=50</code></td><td>Recent blocks</td></tr>
@@ -162,6 +163,7 @@
                         <tr><td>POST</td><td><code>/api/peers/register</code></td><td>Register a peer</td></tr>
                         <tr><td>POST</td><td><code>/api/peers/resolve</code></td><td>Trigger consensus</td></tr>
                         <tr><td>GET</td><td><code>/docs</code></td><td>Swagger API docs</td></tr>
+                        <tr><td>WS</td><td><code>/ws</code></td><td>Real-time WebSocket events</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -173,10 +175,157 @@
     </main>
 
     <footer>
-        Skyecoin v2.0 &mdash; An educational toy blockchain &mdash; <span class="auto-refresh">Live updates every few seconds</span>
+        Skyecoin v2.0 &mdash; An educational toy blockchain &mdash; <span id="live-indicator">⚡ Live</span>
     </footer>
 
     <script>
+    // ===== WebSocket =====
+    const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = wsProtocol + '//' + location.host + '/ws';
+    let ws;
+    let blockStream = [];
+    let maxStreamBlocks = 20;
+
+    function connectWS() {
+        ws = new WebSocket(wsUrl);
+        ws.onopen = () => {
+            document.getElementById('ws-status').textContent = '⚡ Connected';
+            document.getElementById('ws-status').style.color = 'var(--green)';
+            document.getElementById('live-indicator').innerHTML = '⚡ Live';
+        };
+        ws.onclose = () => {
+            document.getElementById('ws-status').textContent = '⏳ Reconnecting...';
+            document.getElementById('ws-status').style.color = 'var(--yellow)';
+            document.getElementById('live-indicator').innerHTML = '🔌 Disconnected';
+            setTimeout(connectWS, 2000);
+        };
+        ws.onerror = () => {};
+        ws.onmessage = (evt) => {
+            const event = JSON.parse(evt.data);
+            handleEvent(event);
+        };
+    }
+
+    function handleEvent(event) {
+        switch (event.type) {
+            case 'block_mined':
+                onBlockMined(event.data);
+                break;
+            case 'tx_pending':
+                onTxPending(event.data);
+                break;
+            case 'peer_joined':
+                onPeerJoined(event.data);
+                break;
+        }
+    }
+
+    // ===== Block events =====
+    function onBlockMined(data) {
+        blockStream.unshift(data);
+        if (blockStream.length > maxStreamBlocks) blockStream.pop();
+
+        updateStats({height: data.height, difficulty: data.difficulty, last_block_hash: data.block_hash});
+        updateMiningVisualizer(data);
+        prependBlockRow(data);
+        playMineSound();
+    }
+
+    function prependBlockRow(data) {
+        const tables = document.querySelectorAll('#recent-blocks table tbody, #all-blocks table tbody');
+        tables.forEach(tbody => {
+            if (!tbody) return;
+            const row = document.createElement('tr');
+            row.className = 'block-row new-block';
+            row.onclick = () => showBlockDetail(data.block_index);
+            row.innerHTML = `
+                <td style="color: var(--accent); font-weight: 600;">${data.block_index}</td>
+                <td><span class="hash short" title="${data.block_hash}">${data.block_hash.substring(0,16)}...</span></td>
+                <td><span class="address">${data.miner_address.substring(0,12)}...</span></td>
+                <td>${data.tx_count}</td>
+                <td><span class="mono">${data.nonce}</span></td>
+                <td><span class="mono">${data.difficulty}</span></td>`;
+            tbody.insertBefore(row, tbody.firstChild);
+            if (tbody.children.length > 20) tbody.lastElementChild.remove();
+            setTimeout(() => row.classList.remove('new-block'), 2000);
+        });
+    }
+
+    function updateMiningVisualizer(data) {
+        const el = document.getElementById('mining-visualizer');
+        if (!el.querySelector('.mining-card')) return;
+        const nonceEl = document.getElementById('last-nonce');
+        const hashEl = document.getElementById('last-hash');
+        const idxEl = document.getElementById('last-block-idx');
+        if (nonceEl) nonceEl.textContent = data.nonce;
+        if (hashEl) hashEl.textContent = data.block_hash.substring(0, 24) + '...';
+        if (idxEl) idxEl.textContent = '#' + data.block_index;
+        const pulse = document.getElementById('mining-pulse');
+        if (pulse) { pulse.classList.add('active'); setTimeout(() => pulse.classList.remove('active'), 500); }
+    }
+
+    // ===== Transaction events =====
+    function onTxPending(data) {
+        updateMempoolCount();
+        const el = document.getElementById('flash-container');
+        el.innerHTML = `<div class="flash success">📝 TX pending: ${data.tx_hash.substring(0,16)}... ${data.amount} SC</div>`;
+        setTimeout(() => el.innerHTML = '', 5000);
+    }
+
+    // ===== Peer events =====
+    function onPeerJoined(data) {
+        const badge = document.getElementById('peer-badge');
+        if (badge) badge.textContent = data.peer_count;
+        const el = document.getElementById('flash-container');
+        el.innerHTML = `<div class="flash info">🌐 Peer joined: ${data.address}</div>`;
+        setTimeout(() => el.innerHTML = '', 4000);
+        fetch('/views/peers').then(r => r.text()).then(html => {
+            document.getElementById('peers-list').innerHTML = html;
+        });
+    }
+
+    // ===== Stats update =====
+    function updateStats(data) {
+        document.querySelectorAll('.stat-value.highlight').forEach(el => {
+            const label = el.parentElement.querySelector('.stat-label');
+            if (label && label.textContent.trim() === 'Height') el.textContent = data.height;
+        });
+        document.querySelectorAll('.stat-value.green').forEach(el => {
+            const label = el.parentElement.querySelector('.stat-label');
+            if (label && label.textContent.trim() === 'Last Block') el.textContent = data.last_block_hash.substring(0,12) + '...';
+        });
+    }
+
+    function updateMempoolCount() {
+        fetch('/api/mempool').then(r => r.json()).then(txs => {
+            const count = document.getElementById('mempool-count');
+            if (count) count.textContent = txs.length;
+        });
+    }
+
+    // ===== Sound effects =====
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    let audioCtx;
+
+    function playMineSound() {
+        try {
+            if (!audioCtx) audioCtx = new AudioCtx();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.05);
+            osc.frequency.exponentialRampToValueAtTime(600, audioCtx.currentTime + 0.15);
+            gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+            osc.start(audioCtx.currentTime);
+            osc.stop(audioCtx.currentTime + 0.2);
+        } catch(e) {}
+    }
+
+    // ===== Tab switching =====
     function switchTab(name) {
         document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
         document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
@@ -192,6 +341,12 @@
                 document.getElementById('api-json').textContent = JSON.stringify(data, null, 2);
             });
         }
+        if (name === 'mempool' || name === 'peers') {
+            fetch('/views/' + name).then(r => r.text()).then(html => {
+                document.getElementById(name + '-content') && (document.getElementById(name + '-content').innerHTML = html);
+                document.getElementById(name + 's-list') && (document.getElementById(name + 's-list').innerHTML = html);
+            });
+        }
     }
 
     function showBlockDetail(idx) {
@@ -202,9 +357,6 @@
                 document.getElementById('dashboard-detail').innerHTML = html;
                 document.getElementById('blocks-detail').innerHTML = html;
                 switchTab('dashboard');
-            })
-            .catch(e => {
-                document.getElementById('dashboard-detail').innerHTML = '<div class="flash error">Block not found</div>';
             });
     }
 
@@ -216,7 +368,7 @@
             .then(data => {
                 document.getElementById('block-detail').innerHTML = renderBlockDetail(data, false);
             })
-            .catch(e => {
+            .catch(() => {
                 document.getElementById('block-detail').innerHTML = '<div class="flash error">Block not found</div>';
             });
     }
@@ -243,12 +395,8 @@
             data.transactions.forEach(tx => {
                 html += '<tr>';
                 html += '<td><span class="hash short" title="' + tx.tx_hash + '">' + tx.tx_hash.substring(0, 16) + '...</span></td>';
-                html += '<td>' + (tx.sender === 'COINBASE'
-                    ? '<span class="badge coinbase">COINBASE</span>'
-                    : '<span class="badge confirmed">TX</span>') + '</td>';
-                html += '<td>' + (tx.sender === 'COINBASE'
-                    ? 'Reward'
-                    : '<span class="address">' + tx.sender.substring(0, 12) + '...</span>') + '</td>';
+                html += '<td>' + (tx.sender === 'COINBASE' ? '<span class="badge coinbase">COINBASE</span>' : '<span class="badge confirmed">TX</span>') + '</td>';
+                html += '<td>' + (tx.sender === 'COINBASE' ? 'Reward' : '<span class="address">' + tx.sender.substring(0, 12) + '...</span>') + '</td>';
                 html += '<td><span class="address">' + tx.recipient.substring(0, 12) + '...</span></td>';
                 html += '<td class="amount">' + tx.amount.toFixed(6) + ' SC</td>';
                 html += '<td>' + (tx.fee || 0).toFixed(6) + '</td>';
@@ -262,68 +410,37 @@
 
     function showWalletKey() {
         const display = document.getElementById('wallet-key-display');
-        if (display.innerHTML && display.style.display !== 'none') {
-            display.innerHTML = '';
-            return;
-        }
-        fetch('/api/wallet/key')
-            .then(r => r.json())
-            .then(data => {
-                display.innerHTML = `
-                    <div class="wallet-field">
-                        <div class="label">Private Key (keep secret!)</div>
-                        <div class="value" style="max-height: 120px; color: var(--red); word-break: break-all;">${data.private_key}</div>
-                    </div>
-                    <div class="wallet-field" style="margin-top: 8px;">
-                        <div class="label">Public Key</div>
-                        <div class="value" style="max-height: 120px; word-break: break-all;">${data.public_key}</div>
-                    </div>`;
-            });
+        if (display.innerHTML && display.style.display !== 'none') { display.innerHTML = ''; return; }
+        fetch('/api/wallet/key').then(r => r.json()).then(data => {
+            display.innerHTML = `
+                <div class="wallet-field"><div class="label">Private Key</div>
+                <div class="value" style="max-height:120px;color:var(--red);word-break:break-all;">${data.private_key}</div></div>
+                <div class="wallet-field" style="margin-top:8px;"><div class="label">Public Key</div>
+                <div class="value" style="max-height:120px;word-break:break-all;">${data.public_key}</div></div>`;
+        });
     }
 
     function generateNewWallet() {
-        if (!confirm('Replace your current wallet with a new one? This cannot be undone.')) return;
-        fetch('/api/wallet/generate', {method: 'POST'})
-            .then(r => r.json())
-            .then(data => {
-                document.getElementById('wallet-balance').textContent = data.balance.toFixed(6);
-                document.getElementById('wallet-key-display').innerHTML = '';
-                location.reload();
-            });
+        if (!confirm('Replace your current wallet? This cannot be undone.')) return;
+        fetch('/api/wallet/generate', {method: 'POST'}).then(r => r.json()).then(data => {
+            document.getElementById('wallet-balance').textContent = data.balance.toFixed(6);
+            document.getElementById('wallet-key-display').innerHTML = '';
+            location.reload();
+        });
     }
 
     function addPeer() {
         const addr = document.getElementById('peer-address').value.trim();
-        if (!addr) {
-            document.getElementById('peer-result').innerHTML = '<div class="flash error">Enter a peer address (host:port)</div>';
-            return;
-        }
-        fetch('/api/peers/register', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({address: addr})
-        })
-        .then(r => r.json())
-        .then(data => {
-            document.getElementById('peer-result').innerHTML = '<div class="flash success">' + data.message + '</div>';
-            document.getElementById('peer-address').value = '';
-        })
-        .catch(e => {
-            document.getElementById('peer-result').innerHTML = '<div class="flash error">Failed to add peer</div>';
-        });
+        if (!addr) { document.getElementById('peer-result').innerHTML = '<div class="flash error">Enter a peer address (host:port)</div>'; return; }
+        fetch('/api/peers/register', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:addr})})
+            .then(r => r.json()).then(data => {
+                document.getElementById('peer-result').innerHTML = '<div class="flash success">' + data.message + '</div>';
+                document.getElementById('peer-address').value = '';
+            });
     }
 
-    document.addEventListener('htmx:afterRequest', function(evt) {
-        if (evt.detail.target.id === 'send-result') {
-            try {
-                const resp = JSON.parse(evt.detail.xhr.responseText);
-                const cls = resp.message.includes('accepted') ? 'success' : 'error';
-                evt.detail.target.innerHTML = '<div class="flash ' + cls + '">' + resp.message + '</div>';
-            } catch(e) {
-                evt.detail.target.innerHTML = '<div class="flash error">' + evt.detail.xhr.responseText + '</div>';
-            }
-        }
-    });
+    // ===== Init =====
+    connectWS();
     </script>
 </body>
 </html>

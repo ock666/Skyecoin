@@ -1,7 +1,9 @@
+import json
 import logging
+import asyncio
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
@@ -11,6 +13,7 @@ from skyecoin.storage import Database
 from skyecoin.chain import ChainManager
 from skyecoin.mempool import Mempool
 from skyecoin.network import NodeManager
+from skyecoin.events import event_bus
 from skyecoin.api.schemas import (
     TransactionRequest,
     PeerRegisterRequest,
@@ -46,6 +49,34 @@ def create_app(config: Config) -> FastAPI:
     web_dir = Path(__file__).parent / "web"
     app.mount("/static", StaticFiles(directory=str(web_dir / "static")), name="static")
     templates = Jinja2Templates(directory=str(web_dir / "templates"))
+
+    # =========================================================================
+    # WebSocket - Real-time events
+    # =========================================================================
+
+    @app.websocket("/ws")
+    async def websocket_endpoint(ws: WebSocket):
+        await ws.accept()
+        sub = await event_bus.subscribe()
+        logger.info("WebSocket client connected (%d total)", event_bus.subscriber_count)
+        try:
+            history = await event_bus.get_history(limit=50)
+            for event in history:
+                await ws.send_json(event)
+
+            while True:
+                event = await sub.queue.get()
+                try:
+                    await ws.send_json(event)
+                except Exception:
+                    break
+        except WebSocketDisconnect:
+            pass
+        except Exception:
+            pass
+        finally:
+            await sub.close()
+            logger.info("WebSocket client disconnected (%d remaining)", event_bus.subscriber_count)
 
     # =========================================================================
     # Web UI Routes
@@ -175,6 +206,7 @@ def create_app(config: Config) -> FastAPI:
 
         if mempool.add_transaction(tx):
             nodes.broadcast_transaction(tx)
+            asyncio.create_task(event_bus.publish("tx_pending", tx.to_dict()))
             return MessageResponse(message=f"Transaction accepted: {tx.tx_hash}")
         else:
             raise HTTPException(status_code=400, detail="Transaction rejected")
@@ -196,12 +228,26 @@ def create_app(config: Config) -> FastAPI:
         if not accepted:
             raise HTTPException(status_code=400, detail=msg)
 
+        stats = chain.get_chain_stats()
+        asyncio.create_task(event_bus.publish("block_mined", {
+            "block_index": block.block_index,
+            "block_hash": block.block_hash,
+            "miner_address": block.miner_address,
+            "tx_count": len(block.transactions),
+            "nonce": block.nonce,
+            "difficulty": block.difficulty,
+            "height": stats["height"],
+        }))
         nodes.broadcast_block(block)
         return MessageResponse(message=f"Block accepted: {block.block_hash}")
 
     @app.post("/api/peers/register")
     async def register_peer(peer: PeerRegisterRequest):
         nodes.register_node(peer.address)
+        asyncio.create_task(event_bus.publish("peer_joined", {
+            "address": peer.address,
+            "peer_count": len(nodes.get_nodes()),
+        }))
         try:
             import httpx
             client = httpx.Client(timeout=5.0)

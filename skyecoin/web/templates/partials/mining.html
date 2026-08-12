@@ -1,0 +1,22 @@
+<div class="card mining-card">
+    <h2>⛏️ Live Mining Feed</h2>
+    <div id="mining-pulse" class="mining-pulse"></div>
+    <div class="mining-stats">
+        <div class="mining-stat">
+            <span class="stat-label">Last Block</span>
+            <span class="stat-value highlight" id="last-block-idx">#{{ stats.height|default(0) }}</span>
+        </div>
+        <div class="mining-stat">
+            <span class="stat-label">Last Nonce</span>
+            <span class="stat-value mono" id="last-nonce">---</span>
+        </div>
+        <div class="mining-stat">
+            <span class="stat-label">Last Hash</span>
+            <span class="stat-value hash" id="last-hash" style="font-size:0.8em;">---</span>
+        </div>
+        <div class="mining-stat">
+            <span class="stat-label">Difficulty</span>
+            <span class="stat-value yellow" id="live-diff">{{ stats.difficulty|default(4) }}</span>
+        </div>
+    </div>
+</div>
