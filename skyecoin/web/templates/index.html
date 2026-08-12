@@ -30,6 +30,8 @@
         </button>
         <button class="tab-btn" onclick="switchTab('api')">API</button>
         <button class="tab-btn" onclick="switchTab('achievements')">🏆</button>
+        <button class="tab-btn" onclick="switchTab('nodes')">🖥️</button>
+        <button class="tab-btn" onclick="switchTab('sim')">🧪</button>
     </nav>
 
     <main>
@@ -174,13 +176,50 @@
             </div>
         </div>
 
-        <!-- Achievements -->
-        <div id="tab-achievements" class="tab-content">
+        <!-- Multi-node Dashboard -->
+        <div id="tab-nodes" class="tab-content">
             <div class="card">
-                <h2>🏆 Achievements</h2>
-                <div id="achievements-grid" class="achievements-grid">
-                    <div class="empty-state">Loading achievements...</div>
+                <h2>🖥️ Multi-Node Dashboard</h2>
+                <p style="color: var(--text-muted); font-size: 0.85em; margin-bottom: 12px;">
+                    Monitor multiple nodes side-by-side. Add peer URLs below.
+                </p>
+                <div class="flex-row" style="margin-bottom: 16px;">
+                    <input type="text" id="node-url" placeholder="192.168.0.51:5000" style="width: 250px;">
+                    <button onclick="addNodeMonitor()">Add Node</button>
                 </div>
+                <div id="node-panels" class="node-panels">
+                    <div class="node-panel local-node" id="node-panel-local">
+                        <div class="node-panel-header">
+                            <span class="node-panel-name mono">This Node</span>
+                            <span class="node-panel-status green">local</span>
+                        </div>
+                        <div class="node-panel-stats" id="node-stats-local">
+                            <div class="stat"><span class="stat-label">Height</span><span class="stat-value highlight">-</span></div>
+                            <div class="stat"><span class="stat-label">Peers</span><span class="stat-value">-</span></div>
+                            <div class="stat"><span class="stat-label">Mempool</span><span class="stat-value">-</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Simulation Lab -->
+        <div id="tab-sim" class="tab-content">
+            <div class="card">
+                <h2>🧪 Simulation Lab</h2>
+                <p style="color: var(--text-muted); font-size: 0.85em; margin-bottom: 16px;">
+                    Experiment with blockchain mechanics.
+                </p>
+
+                <h3 style="color: var(--red);">💣 Double-Spend Attack</h3>
+                <p style="color: var(--text-muted); font-size: 0.8em; margin-bottom: 12px;">
+                    Submit two conflicting transactions spending the same coins. Only one survives when the block mines.
+                </p>
+                <div class="flex-row" style="gap: 8px;">
+                    <button id="ds-btn" onclick="tryDoubleSpend()">Attempt Double-Spend</button>
+                    <span id="ds-status" style="font-size: 0.8em; color: var(--text-muted);"></span>
+                </div>
+                <div id="ds-result" style="margin-top: 12px;"></div>
             </div>
         </div>
     </main>
@@ -471,6 +510,128 @@
             });
             html += '</div>';
             document.getElementById('achievements-grid').innerHTML = html;
+        });
+    }
+
+    // ===== Multi-node monitoring =====
+    const nodeMonitors = {};
+    function addNodeMonitor() {
+        const url = document.getElementById('node-url').value.trim();
+        if (!url || nodeMonitors[url]) return;
+        nodeMonitors[url] = true;
+        document.getElementById('node-url').value = '';
+
+        const panelId = 'node-panel-' + url.replace(/[.:]/g, '-');
+        const html = `
+            <div class="node-panel" id="${panelId}">
+                <div class="node-panel-header">
+                    <span class="node-panel-name mono">${url}</span>
+                    <span class="node-panel-status yellow">connecting</span>
+                    <button class="secondary" onclick="removeNodeMonitor('${url}', '${panelId}')" style="font-size:0.7em;padding:4px 8px;">×</button>
+                </div>
+                <div class="node-panel-stats" id="node-stats-${panelId}">
+                    <div class="stat"><span class="stat-label">Height</span><span class="stat-value highlight">-</span></div>
+                    <div class="stat"><span class="stat-label">Peers</span><span class="stat-value">-</span></div>
+                    <div class="stat"><span class="stat-label">Mempool</span><span class="stat-value">-</span></div>
+                </div>
+            </div>`;
+        document.getElementById('node-panels').insertAdjacentHTML('beforeend', html);
+
+        const wsUrl = 'ws://' + url + '/ws';
+        try {
+            const mws = new WebSocket(wsUrl);
+            mws.onopen = () => updateNodePanel(panelId, 'green', 'connected');
+            mws.onclose = () => { updateNodePanel(panelId, 'red', 'disconnected'); delete nodeMonitors[url]; };
+            mws.onmessage = (evt) => {
+                const event = JSON.parse(evt.data);
+                if (event.type === 'block_mined') {
+                    updateNodePanelStats(panelId, event.data.height, '-', '-');
+                }
+            };
+            setInterval(() => {
+                fetch('http://' + url + '/api/stats').then(r => r.json()).then(data => {
+                    updateNodePanelStats(panelId, data.height, data.peer_count, data.mempool_size);
+                }).catch(() => {});
+            }, 3000);
+        } catch(e) {
+            updateNodePanel(panelId, 'red', 'error');
+        }
+    }
+
+    function updateNodePanel(panelId, color, text) {
+        const statusEl = document.querySelector('#' + panelId + ' .node-panel-status');
+        if (statusEl) { statusEl.textContent = text; statusEl.className = 'node-panel-status ' + color; }
+    }
+
+    function updateNodePanelStats(panelId, height, peers, mempool) {
+        const statsEl = document.getElementById('node-stats-' + panelId);
+        if (!statsEl) return;
+        const values = statsEl.querySelectorAll('.stat-value');
+        if (values[0]) values[0].textContent = height;
+        if (values[1]) values[1].textContent = peers;
+        if (values[2]) values[2].textContent = mempool;
+    }
+
+    function removeNodeMonitor(url, panelId) {
+        delete nodeMonitors[url];
+        const panel = document.getElementById(panelId);
+        if (panel) panel.remove();
+    }
+
+    // Update local node panel
+    setInterval(() => {
+        fetch('/api/stats').then(r => r.json()).then(data => {
+            updateNodePanelStats('node-stats-local', data.height, data.peer_count, data.mempool_size);
+        }).catch(() => {});
+    }, 2000);
+
+    // ===== Double-spend simulator =====
+    function tryDoubleSpend() {
+        const btn = document.getElementById('ds-btn');
+        const status = document.getElementById('ds-status');
+        const result = document.getElementById('ds-result');
+        btn.disabled = true;
+        status.textContent = 'Creating conflicting transactions...';
+
+        fetch('/api/wallet/key').then(r => r.json()).then(w => {
+            const pk = w.private_key;
+            const addr = w.address;
+            const burnAddr = 'BURN' + addr.substring(4, 40);
+
+            const tx1 = {sender_private_key: pk, recipient: burnAddr, amount: 1.0, fee: 0.001};
+            const tx2 = {sender_private_key: pk, recipient: addr, amount: 0.5, fee: 0.001};
+
+            Promise.all([
+                fetch('/api/transactions/new', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(tx1)}),
+                fetch('/api/transactions/new', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(tx2)})
+            ]).then(responses => {
+                return Promise.all(responses.map(r => r.json()));
+            }).then(results => {
+                const bothAccepted = results.every(r => r.message && r.message.includes('accepted'));
+                status.textContent = bothAccepted ? 'Both in mempool - waiting for block...' : 'One rejected!';
+                result.innerHTML = results.map((r, i) =>
+                    `<div class="flash ${r.message && r.message.includes('accepted') ? 'success' : 'error'}">TX${i+1}: ${r.message || r.detail}</div>`
+                ).join('');
+
+                if (bothAccepted) {
+                    const checkInterval = setInterval(() => {
+                        fetch('/api/mempool').then(r => r.json()).then(txs => {
+                            if (txs.length < 2) {
+                                clearInterval(checkInterval);
+                                status.textContent = 'Block mined! Check the mempool - only one TX survived.';
+                                result.innerHTML += '<div class="flash info">⚡ Double-spend resolved: one transaction was rejected by the block!</div>';
+                                btn.disabled = false;
+                            }
+                        });
+                    }, 1000);
+                    setTimeout(() => { clearInterval(checkInterval); btn.disabled = false; }, 30000);
+                } else {
+                    btn.disabled = false;
+                }
+            }).catch(e => {
+                status.textContent = 'Error: ' + e.message;
+                btn.disabled = false;
+            });
         });
     }
 
