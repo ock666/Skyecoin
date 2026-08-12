@@ -1,14 +1,14 @@
 import pytest
-from serpentcoin.crypto import generate_keypair
-from serpentcoin.models.block import Block
-from serpentcoin.models.transaction import create_coinbase_transaction, create_transaction
-from serpentcoin.mining import mine_block, validate_proof
-from serpentcoin.validation import validate_block, validate_proof_of_work
-from serpentcoin.mining.difficulty import calculate_difficulty
-from serpentcoin.storage import Database
-from serpentcoin.config import Config
-from serpentcoin.chain import ChainManager
-from serpentcoin.mempool import Mempool
+from skyecoin.crypto import generate_keypair
+from skyecoin.models.block import Block
+from skyecoin.models.transaction import create_coinbase_transaction, create_transaction
+from skyecoin.mining import mine_block, validate_proof
+from skyecoin.validation import validate_block, validate_proof_of_work
+from skyecoin.mining.difficulty import calculate_difficulty
+from skyecoin.storage import Database
+from skyecoin.config import Config
+from skyecoin.chain import ChainManager
+from skyecoin.mempool import Mempool
 
 
 class TestBlock:

@@ -10,7 +10,7 @@ build/
 venv/
 .git/
 .gitignore
-data/serpentcoin.db
+data/skyecoin.db
 *.db
 .DS_Store
 .idea/

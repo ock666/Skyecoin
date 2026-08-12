@@ -1,5 +1,5 @@
 import pytest
-from serpentcoin.crypto import generate_keypair, sign_data, verify_signature, load_private_key, public_key_to_address, public_key_hex
+from skyecoin.crypto import generate_keypair, sign_data, verify_signature, load_private_key, public_key_to_address, public_key_hex
 
 
 class TestCrypto:

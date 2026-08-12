@@ -3,7 +3,7 @@ from typing import Optional
 
 
 class TransactionRequest(BaseModel):
-    sender_private_key: str
+    sender_private_key: Optional[str] = None
     recipient: str = Field(min_length=1, max_length=128)
     amount: float = Field(gt=0)
     fee: float = Field(default=0.0, ge=0)
@@ -69,5 +69,4 @@ class BalanceResponse(BaseModel):
 class WalletResponse(BaseModel):
     address: str
     public_key: str
-    private_key: str
     balance: float

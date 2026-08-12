@@ -4,7 +4,7 @@ import time
 import logging
 from typing import Optional
 
-from serpentcoin.crypto import (
+from skyecoin.crypto import (
     sign_data,
     verify_signature,
     load_private_key,

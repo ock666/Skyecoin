@@ -2,11 +2,11 @@
 set -e
 
 SERVER="root@192.168.0.51"
-REMOTE_DIR="/mnt/user/appdata/serpentcoin"
+REMOTE_DIR="/mnt/user/appdata/skyecoin"
 KEY="$HOME/.ssh/id_rsa"
 SSH_OPTS="-o StrictHostKeyChecking=accept-new -i $KEY"
 
-echo "=== Serpentcoin Deploy ==="
+echo "=== Skyecoin Deploy ==="
 echo "Server: $SERVER"
 echo "Target: $REMOTE_DIR"
 echo ""
@@ -24,7 +24,7 @@ rsync -avz --delete \
     --exclude '__pycache__' \
     --exclude '*.pyc' \
     --exclude '.pytest_cache' \
-    --exclude 'data/serpentcoin.db' \
+    --exclude 'data/skyecoin.db' \
     --exclude 'data/config.json' \
     -e "ssh $SSH_OPTS" \
     ./ "$SERVER:$REMOTE_DIR/"

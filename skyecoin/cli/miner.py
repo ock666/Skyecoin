@@ -5,9 +5,9 @@ import logging
 import urllib.request
 import json
 
-from serpentcoin.models.block import Block, create_block
-from serpentcoin.models.transaction import Transaction, create_coinbase_transaction
-from serpentcoin.mining import mine_block
+from skyecoin.models.block import Block, create_block
+from skyecoin.models.transaction import Transaction, create_coinbase_transaction
+from skyecoin.mining import mine_block
 
 logger = logging.getLogger(__name__)
 
@@ -33,11 +33,11 @@ def post_json(url: str, data: dict) -> dict:
 
 
 def mine_standalone(miner_private_key_pem: str, difficulty: int = 4):
-    from serpentcoin.crypto import load_private_key, public_key_to_address, public_key_hex
-    from serpentcoin.storage import Database
-    from serpentcoin.config import Config
-    from serpentcoin.chain import ChainManager
-    from serpentcoin.mempool import Mempool
+    from skyecoin.crypto import load_private_key, public_key_to_address, public_key_hex
+    from skyecoin.storage import Database
+    from skyecoin.config import Config
+    from skyecoin.chain import ChainManager
+    from skyecoin.mempool import Mempool
 
     config = Config()
     config.difficulty = difficulty
@@ -82,7 +82,7 @@ def mine_standalone(miner_private_key_pem: str, difficulty: int = 4):
 
         txs = [coinbase] + pending
 
-        from serpentcoin.mining.difficulty import calculate_difficulty
+        from skyecoin.mining.difficulty import calculate_difficulty
         current_difficulty = calculate_difficulty(db, config)
 
         block = create_block(
@@ -105,7 +105,7 @@ def mine_standalone(miner_private_key_pem: str, difficulty: int = 4):
 
 
 def mine_via_node(node_url: str, miner_private_key_pem: str):
-    from serpentcoin.crypto import load_private_key, public_key_to_address, public_key_hex
+    from skyecoin.crypto import load_private_key, public_key_to_address, public_key_hex
 
     priv_key = load_private_key(miner_private_key_pem)
     miner_address = public_key_to_address(priv_key.public_key())
@@ -170,7 +170,7 @@ def mine_via_node(node_url: str, miner_private_key_pem: str):
 def run_miner():
     import argparse
 
-    parser = argparse.ArgumentParser(description="Serpentcoin Miner")
+    parser = argparse.ArgumentParser(description="Skyecoin Miner")
     parser.add_argument("--standalone", action="store_true", help="Run standalone (with local node)")
     parser.add_argument("--node", type=str, default="http://127.0.0.1:5000", help="Node URL")
     parser.add_argument("--difficulty", type=int, default=4, help="Mining difficulty (standalone)")
@@ -186,16 +186,16 @@ def run_miner():
                 miner_private_key = f.read()
     elif not args.standalone:
         try:
-            wallet = fetch_json(f"{args.node}/api/wallet")
+            wallet = fetch_json(f"{args.node}/api/wallet/key")
             miner_private_key = wallet["private_key"]
             logger.info("Using node wallet: %s", wallet["address"])
         except Exception:
-            from serpentcoin.crypto import generate_keypair
+            from skyecoin.crypto import generate_keypair
             priv, pub, addr = generate_keypair()
             miner_private_key = priv
             logger.info("Generated new miner wallet (node unreachable): %s", addr)
     else:
-        from serpentcoin.crypto import generate_keypair
+        from skyecoin.crypto import generate_keypair
         priv, pub, addr = generate_keypair()
         miner_private_key = priv
         logger.info("Generated new miner wallet: %s", addr)

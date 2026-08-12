@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Serpentcoin - An educational toy blockchain.
+"""Skyecoin - An educational toy blockchain.
 
 Usage:
     python run.py                    Start the node + web UI
@@ -15,15 +15,15 @@ import time
 import threading
 import logging
 
-from serpentcoin.config import Config, setup_logging
-from serpentcoin.app import create_app
+from skyecoin.config import Config, setup_logging
+from skyecoin.app import create_app
 
-logger = logging.getLogger("serpentcoin")
+logger = logging.getLogger("skyecoin")
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Serpentcoin v2 - Educational Toy Blockchain"
+        description="Skyecoin v2 - Educational Toy Blockchain"
     )
     parser.add_argument("--host", default="0.0.0.0", help="Host to bind to")
     parser.add_argument("--port", type=int, default=5000, help="Port to bind to")
@@ -44,7 +44,7 @@ def main():
     app = create_app(config)
 
     if args.miner:
-        from serpentcoin.crypto import generate_keypair
+        from skyecoin.crypto import generate_keypair
 
         if args.miner_key:
             with open(args.miner_key) as f:
@@ -56,7 +56,7 @@ def main():
             logger.info("Using node wallet for mining")
 
         def run_miner():
-            from serpentcoin.cli.miner import mine_standalone
+            from skyecoin.cli.miner import mine_standalone
             mine_standalone(miner_key, config.difficulty)
 
         miner_thread = threading.Thread(target=run_miner, daemon=True)
@@ -64,7 +64,7 @@ def main():
         logger.info("Built-in miner started (difficulty: %d)", config.difficulty)
 
     import uvicorn
-    logger.info("Serpentcoin node starting on %s:%d", config.host, config.port)
+    logger.info("Skyecoin node starting on %s:%d", config.host, config.port)
     print(f"\n  Web UI:  http://{config.host if config.host != '0.0.0.0' else 'localhost'}:{config.port}")
     print(f"  API Docs: http://localhost:{config.port}/docs\n")
     uvicorn.run(app, host=config.host, port=config.port, log_level="warning")

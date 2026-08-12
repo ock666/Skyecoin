@@ -18,23 +18,23 @@ class Config:
     max_peers: int = 50
     bootstrap_nodes: list[str] = field(default_factory=list)
     data_dir: str = "data"
-    db_name: str = "serpentcoin.db"
+    db_name: str = "skyecoin.db"
 
     @classmethod
     def load(cls, path: Optional[str] = None) -> "Config":
         cfg = cls()
 
         env_map = {
-            "SERPENTCOIN_HOST": "host",
-            "SERPENTCOIN_PORT": ("port", int),
-            "SERPENTCOIN_DIFFICULTY": ("difficulty", int),
-            "SERPENTCOIN_TARGET_BLOCK_TIME": ("target_block_time", int),
-            "SERPENTCOIN_DIFFICULTY_ADJUST_INTERVAL": ("difficulty_adjust_interval", int),
-            "SERPENTCOIN_COINBASE_REWARD": ("coinbase_reward", float),
-            "SERPENTCOIN_FEE_PER_KB": ("fee_per_kb", float),
-            "SERPENTCOIN_MAX_PEERS": ("max_peers", int),
-            "SERPENTCOIN_DATA_DIR": "data_dir",
-            "SERPENTCOIN_DB_NAME": "db_name",
+            "SKYECOIN_HOST": "host",
+            "SKYECOIN_PORT": ("port", int),
+            "SKYECOIN_DIFFICULTY": ("difficulty", int),
+            "SKYECOIN_TARGET_BLOCK_TIME": ("target_block_time", int),
+            "SKYECOIN_DIFFICULTY_ADJUST_INTERVAL": ("difficulty_adjust_interval", int),
+            "SKYECOIN_COINBASE_REWARD": ("coinbase_reward", float),
+            "SKYECOIN_FEE_PER_KB": ("fee_per_kb", float),
+            "SKYECOIN_MAX_PEERS": ("max_peers", int),
+            "SKYECOIN_DATA_DIR": "data_dir",
+            "SKYECOIN_DB_NAME": "db_name",
         }
         for env_var, attr in env_map.items():
             val = os.environ.get(env_var)

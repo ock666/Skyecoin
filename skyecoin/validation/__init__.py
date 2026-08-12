@@ -1,8 +1,8 @@
 import hashlib
 import logging
-from serpentcoin.models.block import Block
-from serpentcoin.models.transaction import Transaction
-from serpentcoin.storage import Database
+from skyecoin.models.block import Block
+from skyecoin.models.transaction import Transaction
+from skyecoin.storage import Database
 
 logger = logging.getLogger(__name__)
 

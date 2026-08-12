@@ -4,9 +4,9 @@ import threading
 from typing import Optional
 import httpx
 
-from serpentcoin.storage import Database
-from serpentcoin.models.block import Block
-from serpentcoin.models.transaction import Transaction
+from skyecoin.storage import Database
+from skyecoin.models.block import Block
+from skyecoin.models.transaction import Transaction
 
 logger = logging.getLogger(__name__)
 

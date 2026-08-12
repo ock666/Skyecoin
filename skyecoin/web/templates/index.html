@@ -3,13 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Serpentcoin Explorer</title>
+    <title>Skyecoin Explorer</title>
     <link rel="stylesheet" href="/static/css/style.css">
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.10/dist/ext/json-enc.js"></script>
 </head>
 <body>
     <header>
-        <h1><span class="icon">🐍</span> Serpentcoin Explorer</h1>
+        <h1><span class="icon">🐍</span> Skyecoin Explorer</h1>
         <span class="node-info">v2.0.0</span>
     </header>
 
@@ -88,24 +89,15 @@
                     </div>
                 </div>
                 <div style="margin-top: 16px;">
-                    <button class="secondary" onclick="toggleKeyVisibility()">Show/Hide Keys</button>
+                    <button class="secondary" onclick="showWalletKey()">View Keys</button>
                     <button class="secondary" onclick="generateNewWallet()">Generate New Wallet</button>
-                    <div id="private-key-display" style="display:none; margin-top: 12px;">
-                        <div class="wallet-field">
-                            <div class="label">Private Key (keep secret!)</div>
-                            <div class="value" style="max-height: 120px; color: var(--red); word-break: break-all;">{{ wallet.private_key }}</div>
-                        </div>
-                        <div class="wallet-field" style="margin-top: 8px;">
-                            <div class="label">Public Key</div>
-                            <div class="value" style="max-height: 120px; word-break: break-all;">{{ wallet.public_key }}</div>
-                        </div>
-                    </div>
+                    <div id="wallet-key-display" style="margin-top: 12px;"></div>
                 </div>
             </div>
 
             <div class="card">
                 <h2>💸 Send Transaction</h2>
-                <form hx-post="/api/transactions/new" hx-target="#send-result" hx-swap="innerHTML">
+                <form hx-post="/api/transactions/new" hx-ext="json-enc" hx-target="#send-result" hx-swap="innerHTML">
                     <label>
                         Recipient Address
                         <input type="text" name="recipient" placeholder="40-char hex address" required minlength="40" maxlength="40">
@@ -118,7 +110,6 @@
                         Fee (SC)
                         <input type="number" name="fee" step="0.000001" min="0" value="0.001">
                     </label>
-                    <input type="hidden" name="sender_private_key" id="sender-private-key" value="{{ wallet.private_key }}">
                     <button type="submit">Send Transaction</button>
                 </form>
                 <div id="send-result" style="margin-top: 12px;"></div>
@@ -182,7 +173,7 @@
     </main>
 
     <footer>
-        Serpentcoin v2.0 &mdash; An educational toy blockchain &mdash; <span class="auto-refresh">Live updates every few seconds</span>
+        Skyecoin v2.0 &mdash; An educational toy blockchain &mdash; <span class="auto-refresh">Live updates every few seconds</span>
     </footer>
 
     <script>
@@ -269,9 +260,25 @@
         return html;
     }
 
-    function toggleKeyVisibility() {
-        const el = document.getElementById('private-key-display');
-        el.style.display = el.style.display === 'none' ? 'block' : 'none';
+    function showWalletKey() {
+        const display = document.getElementById('wallet-key-display');
+        if (display.innerHTML && display.style.display !== 'none') {
+            display.innerHTML = '';
+            return;
+        }
+        fetch('/api/wallet/key')
+            .then(r => r.json())
+            .then(data => {
+                display.innerHTML = `
+                    <div class="wallet-field">
+                        <div class="label">Private Key (keep secret!)</div>
+                        <div class="value" style="max-height: 120px; color: var(--red); word-break: break-all;">${data.private_key}</div>
+                    </div>
+                    <div class="wallet-field" style="margin-top: 8px;">
+                        <div class="label">Public Key</div>
+                        <div class="value" style="max-height: 120px; word-break: break-all;">${data.public_key}</div>
+                    </div>`;
+            });
     }
 
     function generateNewWallet() {
@@ -279,8 +286,8 @@
         fetch('/api/wallet/generate', {method: 'POST'})
             .then(r => r.json())
             .then(data => {
-                document.getElementById('sender-private-key').value = data.private_key;
                 document.getElementById('wallet-balance').textContent = data.balance.toFixed(6);
+                document.getElementById('wallet-key-display').innerHTML = '';
                 location.reload();
             });
     }

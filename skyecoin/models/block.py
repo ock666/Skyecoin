@@ -4,8 +4,8 @@ import time
 import logging
 from typing import Optional
 
-from serpentcoin.crypto import sign_data, verify_signature, load_private_key, load_public_key_from_der, public_key_hex, public_key_to_address
-from serpentcoin.models.transaction import Transaction
+from skyecoin.crypto import sign_data, verify_signature, load_private_key, load_public_key_from_der, public_key_hex, public_key_to_address
+from skyecoin.models.transaction import Transaction
 
 logger = logging.getLogger(__name__)
 

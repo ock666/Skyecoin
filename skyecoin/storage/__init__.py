@@ -70,7 +70,7 @@ CREATE TABLE IF NOT EXISTS config (
 
 
 class Database:
-    def __init__(self, db_path: str = "data/serpentcoin.db"):
+    def __init__(self, db_path: str = "data/skyecoin.db"):
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(str(self.db_path), check_same_thread=False)

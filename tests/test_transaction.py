@@ -1,6 +1,6 @@
 import pytest
-from serpentcoin.crypto import generate_keypair
-from serpentcoin.models.transaction import Transaction, create_transaction, create_coinbase_transaction
+from skyecoin.crypto import generate_keypair
+from skyecoin.models.transaction import Transaction, create_transaction, create_coinbase_transaction
 
 
 class TestTransaction:

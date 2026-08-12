@@ -6,12 +6,12 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
 
-from serpentcoin.config import Config, setup_logging
-from serpentcoin.storage import Database
-from serpentcoin.chain import ChainManager
-from serpentcoin.mempool import Mempool
-from serpentcoin.network import NodeManager
-from serpentcoin.api.schemas import (
+from skyecoin.config import Config, setup_logging
+from skyecoin.storage import Database
+from skyecoin.chain import ChainManager
+from skyecoin.mempool import Mempool
+from skyecoin.network import NodeManager
+from skyecoin.api.schemas import (
     TransactionRequest,
     PeerRegisterRequest,
     StatsResponse,
@@ -19,14 +19,14 @@ from serpentcoin.api.schemas import (
     WalletResponse,
     MessageResponse,
 )
-from serpentcoin.models.transaction import create_transaction
-from serpentcoin.crypto import generate_keypair
+from skyecoin.models.transaction import create_transaction
+from skyecoin.crypto import generate_keypair
 
 logger = logging.getLogger(__name__)
 
 
 def create_app(config: Config) -> FastAPI:
-    app = FastAPI(title="Serpentcoin", version="2.0.0", docs_url="/docs")
+    app = FastAPI(title="Skyecoin", version="2.0.0", docs_url="/docs")
 
     db = Database(config.db_path)
     mempool = Mempool()
@@ -157,9 +157,10 @@ def create_app(config: Config) -> FastAPI:
 
     @app.post("/api/transactions/new", response_model=MessageResponse)
     async def new_transaction(tx_req: TransactionRequest):
+        private_key = tx_req.sender_private_key or wallet["private_key"]
         try:
             tx = create_transaction(
-                sender_private_key_pem=tx_req.sender_private_key,
+                sender_private_key_pem=private_key,
                 recipient=tx_req.recipient,
                 amount=tx_req.amount,
                 fee=tx_req.fee,
@@ -167,7 +168,7 @@ def create_app(config: Config) -> FastAPI:
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Failed to create transaction: {e}")
 
-        from serpentcoin.validation import validate_transaction_for_mempool
+        from skyecoin.validation import validate_transaction_for_mempool
         valid, reason = validate_transaction_for_mempool(tx, db)
         if not valid:
             raise HTTPException(status_code=400, detail=reason)
@@ -180,8 +181,8 @@ def create_app(config: Config) -> FastAPI:
 
     @app.post("/api/block", response_model=MessageResponse)
     async def submit_block(block_data: dict):
-        from serpentcoin.models.block import Block
-        from serpentcoin.validation import validate_block
+        from skyecoin.models.block import Block
+        from skyecoin.validation import validate_block
 
         try:
             block = Block.from_dict(block_data)
@@ -238,6 +239,16 @@ def create_app(config: Config) -> FastAPI:
 
     @app.get("/api/wallet")
     async def get_wallet():
+        w = db.get_wallet()
+        balance = chain.get_balance(w["address"])
+        return {
+            "address": w["address"],
+            "public_key": w["public_key"],
+            "balance": balance,
+        }
+
+    @app.get("/api/wallet/key")
+    async def get_wallet_key():
         w = db.get_wallet()
         balance = chain.get_balance(w["address"])
         return {

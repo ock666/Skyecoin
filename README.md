@@ -1,4 +1,4 @@
-# Serpentcoin v2
+# Skyecoin v2
 
 An educational toy blockchain built to understand how blockchain technology works under the hood.
 
@@ -26,7 +26,7 @@ python run.py
 python run.py --miner --difficulty 4
 
 # Run a separate miner
-python -m serpentcoin.cli.miner --standalone --difficulty 4
+python -m skyecoin.cli.miner --standalone --difficulty 4
 ```
 
 Open **http://localhost:5000** to see the web UI, or **http://localhost:5000/docs** for the API docs.
@@ -34,7 +34,7 @@ Open **http://localhost:5000** to see the web UI, or **http://localhost:5000/doc
 ## Architecture
 
 ```
-serpentcoin/
+skyecoin/
 ├── crypto/        # ECDSA key generation, signing, address derivation
 ├── models/        # Block and Transaction data structures
 ├── validation/    # Block, transaction, and chain validation
@@ -83,13 +83,13 @@ The built-in miner uses random nonce search (like real mining but simpler). Diff
 
 ```bash
 # Easy mining for demos (difficulty 2-8)
-python -m serpentcoin.cli.miner --standalone --difficulty 4
+python -m skyecoin.cli.miner --standalone --difficulty 4
 
 # Mine via a remote node
-python -m serpentcoin.cli.miner --node http://192.168.1.50:5000
+python -m skyecoin.cli.miner --node http://192.168.1.50:5000
 
 # Use a specific wallet
-python -m serpentcoin.cli.miner --standalone --private-key my_key.pem
+python -m skyecoin.cli.miner --standalone --private-key my_key.pem
 ```
 
 ## Running Tests

@@ -1,6 +1,6 @@
 import time
 import logging
-from serpentcoin.models.transaction import Transaction, create_coinbase_transaction
+from skyecoin.models.transaction import Transaction, create_coinbase_transaction
 
 logger = logging.getLogger(__name__)
 

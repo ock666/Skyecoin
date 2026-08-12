@@ -1,5 +1,5 @@
 import logging
-from serpentcoin.storage import Database
+from skyecoin.storage import Database
 
 logger = logging.getLogger(__name__)
 

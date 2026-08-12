@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml ./
-COPY serpentcoin/ serpentcoin/
+COPY skyecoin/ skyecoin/
 
 RUN pip install --no-cache-dir -e .
 
@@ -15,4 +15,4 @@ EXPOSE 5000
 
 VOLUME ["/app/data"]
 
-CMD ["python", "-m", "serpentcoin.app"]
+CMD ["python", "-m", "skyecoin.app"]

@@ -3,7 +3,7 @@ import json
 import random
 import time
 import logging
-from serpentcoin.models.block import Block
+from skyecoin.models.block import Block
 
 logger = logging.getLogger(__name__)
 

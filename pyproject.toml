@@ -1,5 +1,5 @@
 [project]
-name = "serpentcoin"
+name = "skyecoin"
 version = "2.0.0"
 description = "An educational toy blockchain to learn how blockchain works under the hood"
 requires-python = ">=3.10"
@@ -28,7 +28,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["serpentcoin*"]
+include = ["skyecoin*"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

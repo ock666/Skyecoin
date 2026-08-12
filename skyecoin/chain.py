@@ -4,13 +4,13 @@ import time
 import logging
 from typing import Optional
 
-from serpentcoin.config import Config
-from serpentcoin.storage import Database
-from serpentcoin.models.block import Block, create_block
-from serpentcoin.models.transaction import Transaction, create_coinbase_transaction
-from serpentcoin.validation import validate_block, validate_chain
-from serpentcoin.mempool import Mempool
-from serpentcoin.mining.difficulty import calculate_difficulty
+from skyecoin.config import Config
+from skyecoin.storage import Database
+from skyecoin.models.block import Block, create_block
+from skyecoin.models.transaction import Transaction, create_coinbase_transaction
+from skyecoin.validation import validate_block, validate_chain
+from skyecoin.mempool import Mempool
+from skyecoin.mining.difficulty import calculate_difficulty
 
 logger = logging.getLogger(__name__)
 
