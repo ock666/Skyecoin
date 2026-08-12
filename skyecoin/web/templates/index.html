@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="/static/css/style.css">
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
     <script src="https://unpkg.com/htmx.org@1.9.10/dist/ext/json-enc.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 </head>
 <body>
     <header>
@@ -32,6 +33,9 @@
         <button class="tab-btn" onclick="switchTab('achievements')">🏆</button>
         <button class="tab-btn" onclick="switchTab('nodes')">🖥️</button>
         <button class="tab-btn" onclick="switchTab('sim')">🧪</button>
+        <button class="tab-btn" onclick="switchTab('addresses')">📒</button>
+        <button class="tab-btn" onclick="switchTab('sandbox')">🔧</button>
+        <button class="tab-btn" onclick="switchTab('leaderboard')">🏅</button>
     </nav>
 
     <main>
@@ -207,19 +211,118 @@
         <div id="tab-sim" class="tab-content">
             <div class="card">
                 <h2>🧪 Simulation Lab</h2>
-                <p style="color: var(--text-muted); font-size: 0.85em; margin-bottom: 16px;">
-                    Experiment with blockchain mechanics.
-                </p>
 
                 <h3 style="color: var(--red);">💣 Double-Spend Attack</h3>
                 <p style="color: var(--text-muted); font-size: 0.8em; margin-bottom: 12px;">
                     Submit two conflicting transactions spending the same coins. Only one survives when the block mines.
                 </p>
-                <div class="flex-row" style="gap: 8px;">
+                <div class="flex-row" style="gap: 8px; margin-bottom: 20px;">
                     <button id="ds-btn" onclick="tryDoubleSpend()">Attempt Double-Spend</button>
                     <span id="ds-status" style="font-size: 0.8em; color: var(--text-muted);"></span>
                 </div>
-                <div id="ds-result" style="margin-top: 12px;"></div>
+                <div id="ds-result" style="margin-bottom: 24px;"></div>
+
+                <h3 style="color: var(--yellow);">🔀 Chain Fork Simulation</h3>
+                <p style="color: var(--text-muted); font-size: 0.8em; margin-bottom: 12px;">
+                    In a real network, forks happen when two miners find blocks at the same time.
+                    The longest chain wins. Simulate a fork between two chains.
+                </p>
+                <div class="fork-sim">
+                    <div class="fork-chains" id="fork-chains">
+                        <div class="fork-chain" id="fork-chain-a">
+                            <div class="fork-label">Chain A (local)</div>
+                            <div class="fork-blocks" id="fork-blocks-a"></div>
+                            <div class="fork-stats"><span id="fork-length-a">0</span> blocks</div>
+                        </div>
+                        <div class="fork-vs">VS</div>
+                        <div class="fork-chain" id="fork-chain-b">
+                            <div class="fork-label">Chain B (fork)</div>
+                            <div class="fork-blocks" id="fork-blocks-b"></div>
+                            <div class="fork-stats"><span id="fork-length-b">0</span> blocks</div>
+                        </div>
+                    </div>
+                    <div class="flex-row" style="gap: 8px; margin-top: 12px;">
+                        <button onclick="simulateFork()">Simulate Fork</button>
+                        <span id="fork-result" style="font-size: 0.8em; color: var(--text-muted);"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Address Book -->
+        <div id="tab-addresses" class="tab-content">
+            <div class="card">
+                <h2>📒 Address Book</h2>
+                <div class="flex-row" style="margin-bottom: 16px; gap: 8px;">
+                    <input type="text" id="addr-name" placeholder="Name (e.g. Bob)" style="width: 160px;">
+                    <input type="text" id="addr-value" placeholder="40-char hex address" style="width: 340px;" minlength="40" maxlength="40">
+                    <button onclick="saveAddress()">Save</button>
+                </div>
+                <div id="address-list"></div>
+            </div>
+            <div id="qr-display" class="card" style="display:none;">
+                <h2>📱 QR Code</h2>
+                <div class="flex-row" style="align-items: flex-start; gap: 24px;">
+                    <div id="qrcode"></div>
+                    <div>
+                        <div class="stat-label">Address</div>
+                        <div class="address mono" id="qr-address" style="font-size: 0.75em; word-break: break-all;"></div>
+                        <div class="stat-label" style="margin-top: 8px;">Name</div>
+                        <div id="qr-name" style="font-size: 0.9em;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Mempool Sandbox -->
+        <div id="tab-sandbox" class="tab-content">
+            <div class="card">
+                <h2>🔧 Transaction Sandbox</h2>
+                <p style="color: var(--text-muted); font-size: 0.85em; margin-bottom: 16px;">
+                    Craft and preview transactions with real-time validation.
+                </p>
+                <div class="flex-row" style="gap: 24px; flex-wrap: wrap;">
+                    <div style="flex: 1; min-width: 300px;">
+                        <h3>Transaction Builder</h3>
+                        <form id="sandbox-form" style="margin-top: 12px;">
+                            <label>From (sender address)
+                                <input type="text" id="sb-from" placeholder="Your address (auto-filled)" readonly style="background: var(--surface);">
+                            </label>
+                            <label>To (recipient)
+                                <input type="text" id="sb-to" placeholder="40-char hex address" minlength="40" maxlength="40">
+                            </label>
+                            <label>Amount (SC)
+                                <input type="number" id="sb-amount" step="0.000001" min="0.000001" value="1.0">
+                            </label>
+                            <label>Fee (SC)
+                                <input type="number" id="sb-fee" step="0.000001" min="0.000001" value="0.001">
+                            </label>
+                            <label>Lock until block (0 = no lock)
+                                <input type="number" id="sb-lock" step="1" min="0" value="0">
+                            </label>
+                            <div class="flex-row" style="gap: 8px; margin-top: 8px;">
+                                <button type="button" onclick="previewTransaction()">Preview</button>
+                                <button type="button" id="sb-submit" onclick="submitSandboxTx()" disabled>Submit</button>
+                            </div>
+                        </form>
+                    </div>
+                    <div style="flex: 1; min-width: 300px;">
+                        <h3>Preview</h3>
+                        <div id="sb-preview" class="json-view" style="min-height: 200px; margin-top: 12px;">
+                            <span class="empty-state">Fill in transaction details and click Preview</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Leaderboard -->
+        <div id="tab-leaderboard" class="tab-content">
+            <div class="card">
+                <h2>🏅 Miner Leaderboard</h2>
+                <div id="leaderboard-content">
+                    <div class="empty-state">Loading leaderboard...</div>
+                </div>
             </div>
         </div>
     </main>
@@ -394,6 +497,17 @@
         }
         if (name === 'achievements') {
             loadAchievements();
+        }
+        if (name === 'leaderboard') {
+            loadLeaderboard();
+        }
+        if (name === 'addresses') {
+            loadAddressBook();
+        }
+        if (name === 'sandbox') {
+            fetch('/api/wallet').then(r => r.json()).then(w => {
+                document.getElementById('sb-from').value = w.address;
+            });
         }
         if (name === 'mempool' || name === 'peers') {
             fetch('/views/' + name).then(r => r.text()).then(html => {
@@ -578,12 +692,185 @@
         if (panel) panel.remove();
     }
 
-    // Update local node panel
-    setInterval(() => {
-        fetch('/api/stats').then(r => r.json()).then(data => {
-            updateNodePanelStats('node-stats-local', data.height, data.peer_count, data.mempool_size);
-        }).catch(() => {});
-    }, 2000);
+    // ===== Init =====
+    connectWS();
+    loadAddressBook();
+    updateLocalNodeStats();
+
+    // ===== Address Book =====
+    function getAddressBook() {
+        try { return JSON.parse(localStorage.getItem('skyecoin-addresses') || '[]'); }
+        catch(e) { return []; }
+    }
+    function saveAddressBook(book) {
+        localStorage.setItem('skyecoin-addresses', JSON.stringify(book));
+    }
+    function saveAddress() {
+        const name = document.getElementById('addr-name').value.trim();
+        const addr = document.getElementById('addr-value').value.trim();
+        if (!name || addr.length !== 40) return;
+        const book = getAddressBook();
+        book.push({name, addr});
+        saveAddressBook(book);
+        document.getElementById('addr-name').value = '';
+        document.getElementById('addr-value').value = '';
+        loadAddressBook();
+    }
+    function loadAddressBook() {
+        const book = getAddressBook();
+        let html = '<table><thead><tr><th>Name</th><th>Address</th><th>Balance</th><th>QR</th><th></th></tr></thead><tbody>';
+        book.forEach((entry, i) => {
+            html += '<tr>';
+            html += '<td style="font-weight:500;">' + entry.name + '</td>';
+            html += '<td><span class="address mono">' + entry.addr + '</span></td>';
+            html += '<td><span id="bal-' + i + '" class="amount">...</span></td>';
+            html += '<td><button class="secondary" onclick="showQR(\'' + entry.addr + '\',\'' + entry.name + '\')" style="font-size:0.7em;padding:2px 8px;">QR</button></td>';
+            html += '<td><button class="secondary" onclick="useAddress(\'' + entry.addr + '\')" style="font-size:0.7em;padding:2px 8px;">Send</button> ';
+            html += '<button class="secondary danger" onclick="deleteAddress(' + i + ')" style="font-size:0.7em;padding:2px 8px;">×</button></td>';
+            html += '</tr>';
+        });
+        html += '</tbody></table>';
+        if (book.length === 0) html = '<div class="empty-state">No saved addresses. Add one above.</div>';
+        document.getElementById('address-list').innerHTML = html;
+        book.forEach((entry, i) => {
+            fetch('/api/balance/' + entry.addr).then(r => r.json()).then(d => {
+                const el = document.getElementById('bal-' + i);
+                if (el) el.textContent = d.balance.toFixed(4) + ' SC';
+            });
+        });
+    }
+    function showQR(addr, name) {
+        document.getElementById('qr-display').style.display = '';
+        document.getElementById('qr-address').textContent = addr;
+        document.getElementById('qr-name').textContent = name || '';
+        const qrEl = document.getElementById('qrcode');
+        qrEl.innerHTML = '';
+        if (typeof QRCode !== 'undefined') {
+            new QRCode(qrEl, {text: addr, width: 160, height: 160, colorDark: '#c9d1d9', colorLight: '#0d1117'});
+        } else {
+            qrEl.textContent = '[QR code library loading...]';
+        }
+    }
+    function useAddress(addr) {
+        switchTab('wallet');
+        document.querySelector('#tab-wallet input[name=recipient]').value = addr;
+    }
+    function deleteAddress(i) {
+        const book = getAddressBook();
+        book.splice(i, 1);
+        saveAddressBook(book);
+        loadAddressBook();
+    }
+
+    // ===== Sandbox =====
+    function previewTransaction() {
+        const to = document.getElementById('sb-to').value.trim();
+        const amount = parseFloat(document.getElementById('sb-amount').value);
+        const fee = parseFloat(document.getElementById('sb-fee').value);
+        const lock = parseInt(document.getElementById('sb-lock').value) || 0;
+        if (to.length !== 40 || !amount || amount <= 0) return;
+        fetch('/api/wallet').then(r => r.json()).then(w => {
+            document.getElementById('sb-from').value = w.address;
+            const preview = {
+                sender: w.address,
+                recipient: to,
+                amount: amount,
+                fee: fee,
+                lock_until_block: lock,
+                total_cost: amount + fee,
+                balance_after: w.balance - amount - fee,
+                current_balance: w.balance,
+                status: w.balance >= (amount + fee) ? '✅ Valid' : '❌ Insufficient balance',
+            };
+            document.getElementById('sb-preview').textContent = JSON.stringify(preview, null, 2);
+            document.getElementById('sb-submit').disabled = w.balance < (amount + fee);
+        });
+    }
+    function submitSandboxTx() {
+        const to = document.getElementById('sb-to').value.trim();
+        const amount = parseFloat(document.getElementById('sb-amount').value);
+        const fee = parseFloat(document.getElementById('sb-fee').value);
+        const lock = parseInt(document.getElementById('sb-lock').value) || 0;
+        fetch('/api/transactions/new', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({recipient: to, amount, fee, lock_until_block: lock})
+        }).then(r => r.json()).then(data => {
+            document.getElementById('sb-preview').textContent = JSON.stringify(data, null, 2);
+        });
+    }
+
+    // ===== Fork Simulator =====
+    function simulateFork() {
+        const resultEl = document.getElementById('fork-result');
+        resultEl.textContent = 'Fetching chain data...';
+        fetch('/api/chain?limit=10').then(r => r.json()).then(blocks => {
+            if (blocks.length < 4) { resultEl.textContent = 'Need more blocks to simulate. Keep mining!'; return; }
+            const splitPoint = Math.min(3, blocks.length - 1);
+            const chainA = blocks.slice(0, splitPoint + 2);
+            const chainB = blocks.slice(0, splitPoint + 1);
+            chainB.push({
+                block_index: blocks[splitPoint].block_index + 1,
+                block_hash: 'FORK_' + Math.random().toString(16).substring(2, 18),
+                tx_count: 1,
+            });
+            chainB.push({
+                block_index: blocks[splitPoint].block_index + 2,
+                block_hash: 'FORK_' + Math.random().toString(16).substring(2, 18),
+                tx_count: 1,
+            });
+            renderForkChain('fork-blocks-a', chainA, splitPoint);
+            renderForkChain('fork-blocks-b', chainB, splitPoint);
+            document.getElementById('fork-length-a').textContent = chainA.length;
+            document.getElementById('fork-length-b').textContent = chainB.length;
+            resultEl.innerHTML = chainA.length >= chainB.length
+                ? '<span style="color: var(--green);">✓ Chain A wins (longest valid chain) - Chain B orphaned!</span>'
+                : '<span style="color: var(--green);">✓ Chain B is longer - nodes would switch to it!</span>';
+        });
+    }
+    function renderForkChain(containerId, chain, splitPoint) {
+        const container = document.getElementById(containerId);
+        container.innerHTML = chain.map((b, i) => {
+            const isCommon = i <= splitPoint;
+            const isFork = !isCommon;
+            return '<div class="fork-block ' + (isFork ? 'fork-orphan' : 'fork-main') + '" title="Block #' + b.block_index + ': ' + (b.block_hash || '').substring(0, 12) + '">'
+                + (isFork ? '🔀' : '🔗') + ' #' + b.block_index + '</div>';
+        }).join('');
+    }
+
+    // ===== Leaderboard =====
+    function loadLeaderboard() {
+        fetch('/api/leaderboard').then(r => r.json()).then(data => {
+            if (!data.length) {
+                document.getElementById('leaderboard-content').innerHTML = '<div class="empty-state">No miners yet.</div>';
+                return;
+            }
+            let html = '<table><thead><tr><th>#</th><th>Miner</th><th>Blocks Found</th><th>TXs Included</th></tr></thead><tbody>';
+            data.forEach((m, i) => {
+                html += '<tr>';
+                html += '<td>' + (i + 1) + '</td>';
+                html += '<td><span class="address mono">' + m.address.substring(0, 16) + '...</span></td>';
+                html += '<td><span class="badge coinbase">' + m.blocks + '</span></td>';
+                html += '<td>' + m.transactions + '</td>';
+                html += '</tr>';
+            });
+            html += '</tbody></table>';
+            document.getElementById('leaderboard-content').innerHTML = html;
+        });
+    }
+
+    function updateLocalNodeStats() {
+        setInterval(() => {
+            fetch('/api/stats').then(r => r.json()).then(data => {
+                updateNodePanelStats('node-stats-local', data.height, data.peer_count, data.mempool_size);
+                document.getElementById('stat-mempool').textContent = data.mempool_size;
+                document.getElementById('stat-peers').textContent = data.peer_count;
+            }).catch(() => {});
+            fetch('/api/reward').then(r => r.json()).then(data => {
+                document.getElementById('stat-reward').textContent = data.coinbase_reward.toFixed(4) + ' SC';
+            });
+        }, 2000);
+    }
 
     // ===== Double-spend simulator =====
     function tryDoubleSpend() {

@@ -298,6 +298,22 @@ def create_app(config: Config) -> FastAPI:
             return MessageResponse(message="Chain was updated from peers")
         return MessageResponse(message="Chain is already up to date")
 
+    @app.get("/api/leaderboard")
+    async def get_leaderboard():
+        rows = db.fetchall("""
+            SELECT miner_address, COUNT(*) as blocks_found,
+                   SUM((SELECT COUNT(*) FROM transactions WHERE block_index = b.block_index)) as txs_included
+            FROM blocks b GROUP BY miner_address ORDER BY blocks_found DESC LIMIT 20
+        """)
+        return [
+            {
+                "address": r["miner_address"],
+                "blocks": r["blocks_found"],
+                "transactions": r["txs_included"],
+            }
+            for r in rows
+        ]
+
     @app.get("/api/wallet")
     async def get_wallet():
         w = db.get_wallet()

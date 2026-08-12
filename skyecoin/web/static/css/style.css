@@ -513,3 +513,56 @@ footer {
 }
 .node-panel-stats .stat-label { font-size: 0.65em; }
 .node-panel-stats .stat-value { font-size: 0.95em; }
+
+.fork-sim { padding: 8px 0; }
+.fork-chains {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 24px;
+    flex-wrap: wrap;
+}
+.fork-chain {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    min-width: 200px;
+}
+.fork-label {
+    font-size: 0.8em;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+    text-align: center;
+}
+.fork-blocks {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 8px;
+}
+.fork-block {
+    font-size: 0.75em;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-family: inherit;
+}
+.fork-main { background: rgba(63,185,80,0.12); color: var(--green); border: 1px solid rgba(63,185,80,0.3); }
+.fork-orphan { background: rgba(248,81,73,0.12); color: var(--red); border: 1px solid rgba(248,81,73,0.3); animation: orphanPulse 1s infinite alternate; }
+.fork-vs {
+    display: flex;
+    align-items: center;
+    font-size: 1.2em;
+    font-weight: 600;
+    color: var(--yellow);
+    padding-top: 40px;
+}
+.fork-stats {
+    text-align: center;
+    font-size: 0.75em;
+    color: var(--text-muted);
+}
+@keyframes orphanPulse {
+    from { opacity: 0.6; }
+    to { opacity: 1; }
+}
