@@ -1,0 +1,32 @@
+{% if mempool_txs %}
+<table>
+    <thead>
+        <tr>
+            <th>Hash</th>
+            <th>From</th>
+            <th>To</th>
+            <th>Amount</th>
+            <th>Fee</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for tx in mempool_txs %}
+        <tr>
+            <td><span class="hash short" title="{{ tx.tx_hash }}">{{ tx.tx_hash[:16] }}...</span></td>
+            <td>
+                {% if tx.sender == 'COINBASE' %}
+                    <span class="badge coinbase">COINBASE</span>
+                {% else %}
+                    <span class="address">{{ tx.sender[:12] }}...</span>
+                {% endif %}
+            </td>
+            <td><span class="address">{{ tx.recipient[:12] }}...</span></td>
+            <td class="amount">{{ "%.6f"|format(tx.amount) }} SC</td>
+            <td>{{ "%.6f"|format(tx.fee) }}</td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<div class="empty-state">No pending transactions. Send one from the Wallet tab!</div>
+{% endif %}

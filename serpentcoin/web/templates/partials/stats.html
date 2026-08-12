@@ -1,0 +1,26 @@
+<div class="stat">
+    <span class="stat-label">Height</span>
+    <span class="stat-value highlight">{{ stats.height }}</span>
+</div>
+<div class="stat">
+    <span class="stat-label">Difficulty</span>
+    <span class="stat-value yellow">{{ stats.difficulty }}</span>
+</div>
+<div class="stat">
+    <span class="stat-label">Mempool</span>
+    <span class="stat-value">{{ stats.mempool_size }}</span>
+</div>
+<div class="stat">
+    <span class="stat-label">Peers</span>
+    <span class="stat-value">{{ stats.peer_count }}</span>
+</div>
+<div class="stat">
+    <span class="stat-label">Last Block</span>
+    <span class="stat-value green">
+        {% if stats.last_block_hash %}{{ stats.last_block_hash[:12] }}...{% else %}Genesis{% endif %}
+    </span>
+</div>
+<div class="stat">
+    <span class="stat-label">Block Time</span>
+    <span class="stat-value">~{{ stats.last_block_time|default(0)|int }}s ago</span>
+</div>

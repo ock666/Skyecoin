@@ -1,0 +1,35 @@
+[project]
+name = "serpentcoin"
+version = "2.0.0"
+description = "An educational toy blockchain to learn how blockchain works under the hood"
+requires-python = ">=3.10"
+license = {text = "GPL-3.0-only"}
+dependencies = [
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.29.0",
+    "pydantic>=2.0.0",
+    "cryptography>=42.0.0",
+    "jinja2>=3.1.0",
+    "python-multipart>=0.0.9",
+    "aiofiles>=23.0.0",
+    "httpx>=0.27.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "httpx>=0.27.0",
+]
+
+[build-system]
+requires = ["setuptools>=64.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["serpentcoin*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

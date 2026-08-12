@@ -1,0 +1,45 @@
+{% if transactions %}
+<table>
+    <thead>
+        <tr>
+            <th>Type</th>
+            <th>Hash</th>
+            <th>Counterparty</th>
+            <th>Amount</th>
+            <th>Fee</th>
+            <th>Block</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for tx in transactions %}
+        {% set is_sent = tx.sender == address %}
+        <tr>
+            <td>
+                {% if tx.sender == 'COINBASE' %}
+                    <span class="badge coinbase">MINED</span>
+                {% elif is_sent %}
+                    <span class="badge" style="background: var(--red); color: #fff;">SENT</span>
+                {% else %}
+                    <span class="badge confirmed">RECEIVED</span>
+                {% endif %}
+            </td>
+            <td><span class="hash short" title="{{ tx.tx_hash }}">{{ tx.tx_hash[:16] }}...</span></td>
+            <td>
+                <span class="address">
+                    {% if is_sent %}{{ tx.recipient[:12] }}...
+                    {% elif tx.sender == 'COINBASE' %}Coinbase
+                    {% else %}{{ tx.sender[:12] }}...{% endif %}
+                </span>
+            </td>
+            <td class="amount{% if is_sent %} negative{% endif %}">
+                {{ "%.6f"|format(tx.amount) }} SC
+            </td>
+            <td>{{ "%.6f"|format(tx.fee|default(0)) }}</td>
+            <td>{{ tx.block_index }}</td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<div class="empty-state">No transactions yet for this address.</div>
+{% endif %}

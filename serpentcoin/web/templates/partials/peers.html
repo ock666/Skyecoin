@@ -1,0 +1,17 @@
+{% if peers %}
+<table>
+    <thead>
+        <tr><th>#</th><th>Address</th></tr>
+    </thead>
+    <tbody>
+    {% for peer in peers %}
+        <tr>
+            <td>{{ loop.index }}</td>
+            <td><span class="mono">{{ peer }}</span></td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<div class="empty-state">No peers connected. Add one to sync with other nodes!</div>
+{% endif %}

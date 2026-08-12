@@ -1,0 +1,28 @@
+{% if blocks %}
+<table>
+    <thead>
+        <tr>
+            <th>#</th>
+            <th>Hash</th>
+            <th>Miner</th>
+            <th>Txs</th>
+            <th>Nonce</th>
+            <th>Difficulty</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for block in blocks %}
+        <tr>
+            <td><a href="#" onclick="searchBlockById({{ block.block_index }})" style="color: var(--accent); text-decoration: none;">{{ block.block_index }}</a></td>
+            <td><span class="hash short" title="{{ block.block_hash }}">{{ block.block_hash[:16] }}...</span></td>
+            <td><span class="address">{{ block.miner_address[:12] }}...</span></td>
+            <td>{{ block.tx_count }}</td>
+            <td><span class="mono">{{ block.nonce }}</span></td>
+            <td><span class="mono">{{ block.difficulty }}</span></td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<div class="empty-state">No blocks yet. Start mining!</div>
+{% endif %}

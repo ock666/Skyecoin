@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Serpentcoin Explorer</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+</head>
+<body>
+    <header>
+        <h1><span class="icon">🐍</span> Serpentcoin Explorer</h1>
+        <span class="node-info">v2.0.0</span>
+    </header>
+
+    <div class="stats-bar" id="stats-bar" hx-get="/views/stats" hx-trigger="every 5s" hx-swap="innerHTML">
+        {% include "partials/stats.html" %}
+    </div>
+
+    <nav class="tabs">
+        <button class="tab-btn active" onclick="switchTab('dashboard')">Dashboard</button>
+        <button class="tab-btn" onclick="switchTab('blocks')">Blocks</button>
+        <button class="tab-btn" onclick="switchTab('mempool')">
+            Mempool <span id="mempool-count">{{ mempool_txs|length }}</span>
+        </button>
+        <button class="tab-btn" onclick="switchTab('wallet')">Wallet</button>
+        <button class="tab-btn" onclick="switchTab('peers')">
+            Peers <span id="peer-badge">{{ peers|length }}</span>
+        </button>
+        <button class="tab-btn" onclick="switchTab('api')">API</button>
+    </nav>
+
+    <main>
+        <div id="flash-container"></div>
+
+        <!-- Dashboard -->
+        <div id="tab-dashboard" class="tab-content active">
+            <div class="card">
+                <h2>📊 Recent Blocks</h2>
+                <div hx-get="/views/blocks?limit=10" hx-trigger="every 10s" hx-swap="innerHTML">
+                    {% include "partials/block_list.html" %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Blocks -->
+        <div id="tab-blocks" class="tab-content">
+            <div class="card">
+                <h2>🔗 Block Explorer</h2>
+                <div class="flex-row" style="margin-bottom: 16px;">
+                    <input type="number" id="block-search" placeholder="Block index..." style="width: 200px;" min="0">
+                    <button onclick="searchBlock()">Search</button>
+                </div>
+                <div id="block-detail"></div>
+                <h3 style="margin-top: 20px;">All Blocks</h3>
+                <div hx-get="/views/blocks?limit=20" hx-trigger="every 15s" hx-swap="innerHTML" id="all-blocks">
+                    {% include "partials/block_list.html" %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Mempool -->
+        <div id="tab-mempool" class="tab-content">
+            <div class="card">
+                <h2>📝 Pending Transactions</h2>
+                <div hx-get="/views/mempool" hx-trigger="every 5s" hx-swap="innerHTML" id="mempool-content">
+                    {% include "partials/mempool.html" %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Wallet -->
+        <div id="tab-wallet" class="tab-content">
+            <div class="card">
+                <h2>🔑 Your Wallet</h2>
+                <div class="wallet-info">
+                    <div class="wallet-field">
+                        <div class="label">Address</div>
+                        <div class="value">{{ wallet.address }}</div>
+                    </div>
+                    <div class="wallet-field">
+                        <div class="label">Balance</div>
+                        <div class="value" style="font-size: 1.4em; color: var(--green);">
+                            <span id="wallet-balance">{{ "%.6f"|format(wallet.get('_balance', 0)) }}</span> SC
+                        </div>
+                    </div>
+                </div>
+                <div style="margin-top: 16px;">
+                    <button class="secondary" onclick="toggleKeyVisibility()">Show/Hide Keys</button>
+                    <button class="secondary" onclick="generateNewWallet()">Generate New Wallet</button>
+                    <div id="private-key-display" style="display:none; margin-top: 12px;">
+                        <div class="wallet-field">
+                            <div class="label">Private Key (keep secret!)</div>
+                            <div class="value" style="max-height: 120px; color: var(--red); word-break: break-all;">{{ wallet.private_key }}</div>
+                        </div>
+                        <div class="wallet-field" style="margin-top: 8px;">
+                            <div class="label">Public Key</div>
+                            <div class="value" style="max-height: 120px; word-break: break-all;">{{ wallet.public_key }}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>💸 Send Transaction</h2>
+                <form hx-post="/api/transactions/new" hx-target="#send-result" hx-swap="innerHTML">
+                    <label>
+                        Recipient Address
+                        <input type="text" name="recipient" placeholder="40-char hex address" required minlength="40" maxlength="40">
+                    </label>
+                    <label>
+                        Amount (SC)
+                        <input type="number" name="amount" step="0.000001" min="0.000001" required>
+                    </label>
+                    <label>
+                        Fee (SC)
+                        <input type="number" name="fee" step="0.000001" min="0" value="0.001">
+                    </label>
+                    <input type="hidden" name="sender_private_key" id="sender-private-key" value="{{ wallet.private_key }}">
+                    <button type="submit">Send Transaction</button>
+                </form>
+                <div id="send-result" style="margin-top: 12px;"></div>
+            </div>
+
+            <div class="card">
+                <h2>📜 Transaction History</h2>
+                <div hx-get="/views/history/{{ wallet.address }}?limit=20" hx-trigger="every 15s" hx-swap="innerHTML" id="wallet-history">
+                    {% include "partials/history.html" %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Peers -->
+        <div id="tab-peers" class="tab-content">
+            <div class="card">
+                <h2>🌐 Peer Network</h2>
+                <div class="flex-row" style="margin-bottom: 16px;">
+                    <input type="text" id="peer-address" placeholder="host:port" style="width: 250px;">
+                    <button onclick="addPeer()">Add Peer</button>
+                    <button hx-post="/api/peers/resolve" hx-target="#peer-result" hx-swap="innerHTML" class="secondary">Resolve Conflicts</button>
+                </div>
+                <div id="peer-result"></div>
+                <div hx-get="/views/peers" hx-trigger="every 10s" hx-swap="innerHTML" id="peers-list">
+                    {% include "partials/peers.html" %}
+                </div>
+            </div>
+        </div>
+
+        <!-- API -->
+        <div id="tab-api" class="tab-content">
+            <div class="card">
+                <h2>📡 REST API Endpoints</h2>
+                <table>
+                    <thead>
+                        <tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>GET</td><td><code>/api/stats</code></td><td>Chain statistics</td></tr>
+                        <tr><td>GET</td><td><code>/api/chain?limit=50</code></td><td>Recent blocks</td></tr>
+                        <tr><td>GET</td><td><code>/api/block/{index}</code></td><td>Block details</td></tr>
+                        <tr><td>GET</td><td><code>/api/mempool</code></td><td>Pending transactions</td></tr>
+                        <tr><td>GET</td><td><code>/api/balance/{address}</code></td><td>Address balance</td></tr>
+                        <tr><td>GET</td><td><code>/api/history/{address}</code></td><td>Transaction history</td></tr>
+                        <tr><td>GET</td><td><code>/api/peers</code></td><td>Connected peers</td></tr>
+                        <tr><td>GET</td><td><code>/api/difficulty</code></td><td>Current difficulty</td></tr>
+                        <tr><td>GET</td><td><code>/api/wallet</code></td><td>Node wallet info</td></tr>
+                        <tr><td>POST</td><td><code>/api/transactions/new</code></td><td>Submit transaction</td></tr>
+                        <tr><td>POST</td><td><code>/api/block</code></td><td>Submit mined block</td></tr>
+                        <tr><td>POST</td><td><code>/api/peers/register</code></td><td>Register a peer</td></tr>
+                        <tr><td>POST</td><td><code>/api/peers/resolve</code></td><td>Trigger consensus</td></tr>
+                        <tr><td>GET</td><td><code>/docs</code></td><td>Swagger API docs</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="card">
+                <h2>📊 Live Stats (JSON)</h2>
+                <pre class="json-view" id="api-json">Loading...</pre>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        Serpentcoin v2.0 &mdash; An educational toy blockchain &mdash; <span class="auto-refresh">Live updates every few seconds</span>
+    </footer>
+
+    <script>
+    function switchTab(name) {
+        document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+        const tab = document.getElementById('tab-' + name);
+        if (tab) tab.classList.add('active');
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            if (btn.textContent.trim().toLowerCase().startsWith(name.toLowerCase())) {
+                btn.classList.add('active');
+            }
+        });
+        if (name === 'api') {
+            fetch('/api/stats').then(r => r.json()).then(data => {
+                document.getElementById('api-json').textContent = JSON.stringify(data, null, 2);
+            });
+        }
+    }
+
+    function searchBlock() {
+        const idx = document.getElementById('block-search').value;
+        if (idx === '') return;
+        fetch('/api/block/' + idx)
+            .then(r => {
+                if (!r.ok) throw new Error('Not found');
+                return r.json();
+            })
+            .then(data => {
+                let html = '<div class="card"><h2>Block #' + data.block_index + '</h2>';
+                html += '<div class="detail-grid">';
+                html += '<div><span class="stat-label">Hash</span><div class="hash">' + data.block_hash + '</div></div>';
+                html += '<div><span class="stat-label">Previous Hash</span><div class="hash">' + data.previous_hash + '</div></div>';
+                html += '<div><span class="stat-label">Timestamp</span><div>' + new Date(data.timestamp * 1000).toLocaleString() + '</div></div>';
+                html += '<div><span class="stat-label">Nonce / Difficulty</span><div>' + data.nonce + ' / ' + data.difficulty + '</div></div>';
+                html += '<div><span class="stat-label">Miner</span><div class="address">' + data.miner_address + '</div></div>';
+                html += '</div>';
+                if (data.transactions && data.transactions.length) {
+                    html += '<h3 style="margin-top:16px;">Transactions (' + data.transactions.length + ')</h3>';
+                    html += '<table><thead><tr><th>Hash</th><th>From</th><th>To</th><th>Amount</th><th>Fee</th></tr></thead><tbody>';
+                    data.transactions.forEach(tx => {
+                        html += '<tr>';
+                        html += '<td><span class="hash short" title="' + tx.tx_hash + '">' + tx.tx_hash.substring(0,16) + '...</span></td>';
+                        html += '<td>' + (tx.sender === 'COINBASE' ? '<span class="badge coinbase">COINBASE</span>' : '<span class="address">' + tx.sender.substring(0,12) + '...</span>') + '</td>';
+                        html += '<td><span class="address">' + tx.recipient.substring(0,12) + '...</span></td>';
+                        html += '<td class="amount">' + tx.amount.toFixed(6) + ' SC</td>';
+                        html += '<td>' + (tx.fee || 0).toFixed(6) + '</td>';
+                        html += '</tr>';
+                    });
+                    html += '</tbody></table>';
+                }
+                html += '</div>';
+                document.getElementById('block-detail').innerHTML = html;
+            })
+            .catch(e => {
+                document.getElementById('block-detail').innerHTML = '<div class="flash error">Block not found</div>';
+            });
+    }
+
+    function toggleKeyVisibility() {
+        const el = document.getElementById('private-key-display');
+        el.style.display = el.style.display === 'none' ? 'block' : 'none';
+    }
+
+    function generateNewWallet() {
+        if (!confirm('Replace your current wallet with a new one? This cannot be undone.')) return;
+        fetch('/api/wallet/generate', {method: 'POST'})
+            .then(r => r.json())
+            .then(data => {
+                document.getElementById('sender-private-key').value = data.private_key;
+                document.getElementById('wallet-balance').textContent = data.balance.toFixed(6);
+                location.reload();
+            });
+    }
+
+    function addPeer() {
+        const addr = document.getElementById('peer-address').value.trim();
+        if (!addr) {
+            document.getElementById('peer-result').innerHTML = '<div class="flash error">Enter a peer address (host:port)</div>';
+            return;
+        }
+        fetch('/api/peers/register', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({address: addr})
+        })
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('peer-result').innerHTML = '<div class="flash success">' + data.message + '</div>';
+            document.getElementById('peer-address').value = '';
+        })
+        .catch(e => {
+            document.getElementById('peer-result').innerHTML = '<div class="flash error">Failed to add peer</div>';
+        });
+    }
+
+    document.addEventListener('htmx:afterRequest', function(evt) {
+        if (evt.detail.target.id === 'send-result') {
+            try {
+                const resp = JSON.parse(evt.detail.xhr.responseText);
+                const cls = resp.message.includes('accepted') ? 'success' : 'error';
+                evt.detail.target.innerHTML = '<div class="flash ' + cls + '">' + resp.message + '</div>';
+            } catch(e) {
+                evt.detail.target.innerHTML = '<div class="flash error">' + evt.detail.xhr.responseText + '</div>';
+            }
+        }
+    });
+    </script>
+</body>
+</html>
