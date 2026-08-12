@@ -1,4 +1,5 @@
 import json
+import os
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -22,8 +23,30 @@ class Config:
     @classmethod
     def load(cls, path: Optional[str] = None) -> "Config":
         cfg = cls()
+
+        env_map = {
+            "SERPENTCOIN_HOST": "host",
+            "SERPENTCOIN_PORT": ("port", int),
+            "SERPENTCOIN_DIFFICULTY": ("difficulty", int),
+            "SERPENTCOIN_TARGET_BLOCK_TIME": ("target_block_time", int),
+            "SERPENTCOIN_DIFFICULTY_ADJUST_INTERVAL": ("difficulty_adjust_interval", int),
+            "SERPENTCOIN_COINBASE_REWARD": ("coinbase_reward", float),
+            "SERPENTCOIN_FEE_PER_KB": ("fee_per_kb", float),
+            "SERPENTCOIN_MAX_PEERS": ("max_peers", int),
+            "SERPENTCOIN_DATA_DIR": "data_dir",
+            "SERPENTCOIN_DB_NAME": "db_name",
+        }
+        for env_var, attr in env_map.items():
+            val = os.environ.get(env_var)
+            if val is not None:
+                if isinstance(attr, tuple):
+                    setattr(cfg, attr[0], attr[1](val))
+                else:
+                    setattr(cfg, attr, val)
+
         if path is None:
-            path = str(Path("data") / "config.json")
+            path = str(Path(cfg.data_dir) / "config.json")
+
         p = Path(path)
         if p.exists():
             with open(p) as f:
@@ -31,11 +54,12 @@ class Config:
             for key, value in data.items():
                 if hasattr(cfg, key):
                     setattr(cfg, key, value)
+
         return cfg
 
     def save(self, path: Optional[str] = None):
         if path is None:
-            path = str(Path("data") / "config.json")
+            path = str(Path(self.data_dir) / "config.json")
         p = Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
         data = {

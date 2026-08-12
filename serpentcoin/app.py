@@ -255,3 +255,7 @@ def run():
     app = create_app(config)
     import uvicorn
     uvicorn.run(app, host=config.host, port=config.port, log_level="info")
+
+
+if __name__ == "__main__":
+    run()
