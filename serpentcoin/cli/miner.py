@@ -184,6 +184,16 @@ def run_miner():
         else:
             with open(args.private_key) as f:
                 miner_private_key = f.read()
+    elif not args.standalone:
+        try:
+            wallet = fetch_json(f"{args.node}/api/wallet")
+            miner_private_key = wallet["private_key"]
+            logger.info("Using node wallet: %s", wallet["address"])
+        except Exception:
+            from serpentcoin.crypto import generate_keypair
+            priv, pub, addr = generate_keypair()
+            miner_private_key = priv
+            logger.info("Generated new miner wallet (node unreachable): %s", addr)
     else:
         from serpentcoin.crypto import generate_keypair
         priv, pub, addr = generate_keypair()

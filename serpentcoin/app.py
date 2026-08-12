@@ -31,7 +31,7 @@ def create_app(config: Config) -> FastAPI:
     db = Database(config.db_path)
     mempool = Mempool()
     chain = ChainManager(db, mempool, config)
-    nodes = NodeManager(db, config.host, config.port)
+    nodes = NodeManager(db, config.host, config.port, config.bootstrap_nodes)
 
     wallet = db.get_wallet()
     if not wallet:
@@ -41,6 +41,7 @@ def create_app(config: Config) -> FastAPI:
         logger.info("Generated new wallet: %s", address)
 
     chain.initialize(wallet["address"], wallet["public_key"])
+    nodes.start_discovery()
 
     web_dir = Path(__file__).parent / "web"
     app.mount("/static", StaticFiles(directory=str(web_dir / "static")), name="static")
@@ -197,14 +198,40 @@ def create_app(config: Config) -> FastAPI:
         nodes.broadcast_block(block)
         return MessageResponse(message=f"Block accepted: {block.block_hash}")
 
-    @app.post("/api/peers/register", response_model=MessageResponse)
+    @app.post("/api/peers/register")
     async def register_peer(peer: PeerRegisterRequest):
-        if nodes.register_node(peer.address):
-            return MessageResponse(message=f"Peer registered: {peer.address}")
-        return MessageResponse(message="Peer already registered or is self")
+        nodes.register_node(peer.address)
+        try:
+            import httpx
+            client = httpx.Client(timeout=5.0)
+            client.post(f"http://{peer.address}/api/peers/register", json={
+                "address": f"{config.host}:{config.port}",
+            })
+            client.close()
+        except Exception:
+            pass
+        return {
+            "message": f"Registered: {peer.address}",
+            "peers": nodes.get_nodes(),
+        }
+
+    @app.post("/api/peers/gossip")
+    async def gossip(data: dict):
+        sender = data.get("sender", "")
+        remote_peers = data.get("peers", [])
+
+        if sender and sender != nodes.address:
+            nodes.register_node(sender)
+        for peer in remote_peers:
+            if peer != nodes.address:
+                nodes.register_node(peer)
+
+        return {"peers": nodes.get_nodes(), "sender": nodes.address}
 
     @app.post("/api/peers/resolve", response_model=MessageResponse)
     async def resolve():
+        if nodes.resolve_conflicts():
+            return MessageResponse(message="Chain was updated from peers")
         if nodes.resolve_conflicts():
             return MessageResponse(message="Chain was updated from peers")
         return MessageResponse(message="Chain is already up to date")

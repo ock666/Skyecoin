@@ -35,6 +35,7 @@
 
         <!-- Dashboard -->
         <div id="tab-dashboard" class="tab-content active">
+            <div id="dashboard-detail"></div>
             <div class="card">
                 <h2>📊 Recent Blocks</h2>
                 <div hx-get="/views/blocks?limit=10" hx-trigger="every 10s" hx-swap="innerHTML">
@@ -45,6 +46,7 @@
 
         <!-- Blocks -->
         <div id="tab-blocks" class="tab-content">
+            <div id="blocks-detail"></div>
             <div class="card">
                 <h2>🔗 Block Explorer</h2>
                 <div class="flex-row" style="margin-bottom: 16px;">
@@ -201,43 +203,70 @@
         }
     }
 
+    function showBlockDetail(idx) {
+        fetch('/api/block/' + idx)
+            .then(r => { if (!r.ok) throw new Error('Not found'); return r.json(); })
+            .then(data => {
+                const html = renderBlockDetail(data, true);
+                document.getElementById('dashboard-detail').innerHTML = html;
+                document.getElementById('blocks-detail').innerHTML = html;
+                switchTab('dashboard');
+            })
+            .catch(e => {
+                document.getElementById('dashboard-detail').innerHTML = '<div class="flash error">Block not found</div>';
+            });
+    }
+
     function searchBlock() {
         const idx = document.getElementById('block-search').value;
         if (idx === '') return;
         fetch('/api/block/' + idx)
-            .then(r => {
-                if (!r.ok) throw new Error('Not found');
-                return r.json();
-            })
+            .then(r => { if (!r.ok) throw new Error('Not found'); return r.json(); })
             .then(data => {
-                let html = '<div class="card"><h2>Block #' + data.block_index + '</h2>';
-                html += '<div class="detail-grid">';
-                html += '<div><span class="stat-label">Hash</span><div class="hash">' + data.block_hash + '</div></div>';
-                html += '<div><span class="stat-label">Previous Hash</span><div class="hash">' + data.previous_hash + '</div></div>';
-                html += '<div><span class="stat-label">Timestamp</span><div>' + new Date(data.timestamp * 1000).toLocaleString() + '</div></div>';
-                html += '<div><span class="stat-label">Nonce / Difficulty</span><div>' + data.nonce + ' / ' + data.difficulty + '</div></div>';
-                html += '<div><span class="stat-label">Miner</span><div class="address">' + data.miner_address + '</div></div>';
-                html += '</div>';
-                if (data.transactions && data.transactions.length) {
-                    html += '<h3 style="margin-top:16px;">Transactions (' + data.transactions.length + ')</h3>';
-                    html += '<table><thead><tr><th>Hash</th><th>From</th><th>To</th><th>Amount</th><th>Fee</th></tr></thead><tbody>';
-                    data.transactions.forEach(tx => {
-                        html += '<tr>';
-                        html += '<td><span class="hash short" title="' + tx.tx_hash + '">' + tx.tx_hash.substring(0,16) + '...</span></td>';
-                        html += '<td>' + (tx.sender === 'COINBASE' ? '<span class="badge coinbase">COINBASE</span>' : '<span class="address">' + tx.sender.substring(0,12) + '...</span>') + '</td>';
-                        html += '<td><span class="address">' + tx.recipient.substring(0,12) + '...</span></td>';
-                        html += '<td class="amount">' + tx.amount.toFixed(6) + ' SC</td>';
-                        html += '<td>' + (tx.fee || 0).toFixed(6) + '</td>';
-                        html += '</tr>';
-                    });
-                    html += '</tbody></table>';
-                }
-                html += '</div>';
-                document.getElementById('block-detail').innerHTML = html;
+                document.getElementById('block-detail').innerHTML = renderBlockDetail(data, false);
             })
             .catch(e => {
                 document.getElementById('block-detail').innerHTML = '<div class="flash error">Block not found</div>';
             });
+    }
+
+    function renderBlockDetail(data, closeable) {
+        let html = '<div class="card block-detail-card">';
+        html += '<div class="flex-row" style="justify-content: space-between; margin-bottom: 12px;">';
+        html += '<h2>Block #' + data.block_index + '</h2>';
+        if (closeable) html += '<button class="secondary" onclick="this.closest(\'.block-detail-card\').remove()" style="font-size: 0.8em;">× Close</button>';
+        html += '</div>';
+        html += '<div class="detail-grid">';
+        html += '<div><span class="stat-label">Hash</span><div class="hash" style="font-size:0.75em;">' + data.block_hash + '</div></div>';
+        html += '<div><span class="stat-label">Previous Hash</span><div class="hash" style="font-size:0.75em;">' + data.previous_hash + '</div></div>';
+        html += '<div><span class="stat-label">Timestamp</span><div>' + new Date(data.timestamp * 1000).toLocaleString() + '</div></div>';
+        html += '<div><span class="stat-label">Nonce</span><div class="mono">' + data.nonce + '</div></div>';
+        html += '<div><span class="stat-label">Difficulty</span><div class="mono">' + data.difficulty + '</div></div>';
+        html += '<div><span class="stat-label">Merkle Root</span><div class="hash" style="font-size:0.7em;">' + (data.merkle_root || data.block_hash) + '</div></div>';
+        html += '<div><span class="stat-label">Miner</span><div class="address" style="font-size:0.8em;">' + data.miner_address + '</div></div>';
+        html += '<div><span class="stat-label">Miner Signature</span><div class="hash" style="font-size:0.65em;">' + data.miner_signature.substring(0, 60) + '...</div></div>';
+        html += '</div>';
+        if (data.transactions && data.transactions.length) {
+            html += '<h3 style="margin-top: 16px;">Transactions (' + data.transactions.length + ')</h3>';
+            html += '<table><thead><tr><th>Hash</th><th>Type</th><th>From</th><th>To</th><th>Amount</th><th>Fee</th></tr></thead><tbody>';
+            data.transactions.forEach(tx => {
+                html += '<tr>';
+                html += '<td><span class="hash short" title="' + tx.tx_hash + '">' + tx.tx_hash.substring(0, 16) + '...</span></td>';
+                html += '<td>' + (tx.sender === 'COINBASE'
+                    ? '<span class="badge coinbase">COINBASE</span>'
+                    : '<span class="badge confirmed">TX</span>') + '</td>';
+                html += '<td>' + (tx.sender === 'COINBASE'
+                    ? 'Reward'
+                    : '<span class="address">' + tx.sender.substring(0, 12) + '...</span>') + '</td>';
+                html += '<td><span class="address">' + tx.recipient.substring(0, 12) + '...</span></td>';
+                html += '<td class="amount">' + tx.amount.toFixed(6) + ' SC</td>';
+                html += '<td>' + (tx.fee || 0).toFixed(6) + '</td>';
+                html += '</tr>';
+            });
+            html += '</tbody></table>';
+        }
+        html += '</div>';
+        return html;
     }
 
     function toggleKeyVisibility() {

@@ -162,6 +162,14 @@ th {
 
 tr:hover td { background: rgba(255,255,255,0.02); }
 
+.block-row { cursor: pointer; transition: background 0.1s; }
+.block-row:hover { background: rgba(88,166,255,0.05) !important; }
+.block-row:hover td { background: transparent; }
+
+.block-detail-card { animation: fadeIn 0.2s ease; }
+
+@keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+
 .hash {
     font-family: inherit;
     font-size: 0.85em;

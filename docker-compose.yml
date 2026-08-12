@@ -10,20 +10,14 @@ services:
     environment:
       - SERPENTCOIN_HOST=0.0.0.0
       - SERPENTCOIN_PORT=5000
-      - SERPENTCOIN_DIFFICULTY=4
-    command: python -m serpentcoin.app
+      - SERPENTCOIN_DIFFICULTY=16
 
   miner:
     build: .
     container_name: serpentcoin-miner
     restart: unless-stopped
     profiles: ["miner"]
-    environment:
-      - SERPENTCOIN_DATA_DIR=/app/data
-    volumes:
-      - serpentcoin_miner_data:/app/data
-    command: python -m serpentcoin.cli.miner --node http://serpentcoin:5000 --difficulty 4
+    command: python -m serpentcoin.cli.miner --node http://serpentcoin:5000 --difficulty 16
 
 volumes:
   serpentcoin_data:
-  serpentcoin_miner_data:

@@ -1,5 +1,5 @@
 {% if blocks %}
-<table>
+<table class="block-table">
     <thead>
         <tr>
             <th>#</th>
@@ -12,8 +12,8 @@
     </thead>
     <tbody>
     {% for block in blocks %}
-        <tr>
-            <td><a href="#" onclick="searchBlockById({{ block.block_index }})" style="color: var(--accent); text-decoration: none;">{{ block.block_index }}</a></td>
+        <tr class="block-row" onclick="showBlockDetail({{ block.block_index }})" title="Click for details">
+            <td style="color: var(--accent); font-weight: 600;">{{ block.block_index }}</td>
             <td><span class="hash short" title="{{ block.block_hash }}">{{ block.block_hash[:16] }}...</span></td>
             <td><span class="address">{{ block.miner_address[:12] }}...</span></td>
             <td>{{ block.tx_count }}</td>

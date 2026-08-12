@@ -1,5 +1,6 @@
 import time
 import logging
+import threading
 from typing import Optional
 import httpx
 
@@ -11,10 +12,66 @@ logger = logging.getLogger(__name__)
 
 
 class NodeManager:
-    def __init__(self, db: Database, host: str, port: int):
+    def __init__(self, db: Database, host: str, port: int, bootstrap_nodes: list[str] | None = None):
         self.db = db
+        self.host = host
+        self.port = port
         self.address = f"{host}:{port}"
         self._client = httpx.Client(timeout=10.0)
+        self._running = True
+        self._bootstrap_nodes = bootstrap_nodes or []
+
+    def start_discovery(self):
+        """Bootstrap into the network and start periodic peer discovery."""
+        for node in self._bootstrap_nodes:
+            if node != self.address:
+                self._introduce_to(node)
+
+        thread = threading.Thread(target=self._discovery_loop, daemon=True)
+        thread.start()
+
+    def _introduce_to(self, node: str) -> bool:
+        """Introduce ourselves to a peer and learn about their network."""
+        try:
+            url = f"http://{node}/api/peers/register"
+            resp = self._client.post(url, json={"address": self.address})
+            if resp.status_code == 200:
+                self.register_node(node)
+                data = resp.json()
+                peer_list = data.get("peers", [])
+                for peer in peer_list:
+                    if peer != self.address and peer not in self.get_nodes():
+                        self.register_node(peer)
+                logger.info("Introduced to %s, discovered %d peers", node, len(peer_list))
+                return True
+        except Exception:
+            pass
+        return False
+
+    def _discovery_loop(self):
+        """Periodically exchange peer lists and discover new nodes."""
+        while self._running:
+            time.sleep(30)
+            peers = list(self.get_nodes())
+            for peer in peers:
+                try:
+                    url = f"http://{peer}/api/peers/gossip"
+                    resp = self._client.post(url, json={
+                        "peers": self.get_nodes(),
+                        "sender": self.address,
+                    })
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        for new_peer in data.get("peers", []):
+                            if new_peer != self.address:
+                                self.register_node(new_peer)
+                except Exception:
+                    stale_threshold = time.time() - 300
+                    self.db.execute(
+                        "DELETE FROM peers WHERE address = ? AND last_seen < ?",
+                        (peer, stale_threshold),
+                    )
+                    self.db.commit()
 
     def register_node(self, node_address: str) -> bool:
         if node_address == self.address:
@@ -28,17 +85,23 @@ class NodeManager:
     def get_nodes(self) -> list[str]:
         return self.db.get_peers()
 
+    def get_nodes_with_data(self) -> list[dict]:
+        rows = self.db.fetchall("SELECT address, last_seen FROM peers ORDER BY last_seen DESC")
+        return [{"address": r["address"], "last_seen": r["last_seen"]} for r in rows]
+
     def broadcast_block(self, block: Block) -> dict[str, str]:
         results = {}
         block_data = block.to_dict()
         for peer in self.get_nodes():
             try:
-                url = f"http://{peer}/block"
+                url = f"http://{peer}/api/block"
                 resp = self._client.post(url, json=block_data)
                 results[peer] = resp.text
+                self.db.add_peer(peer)
             except Exception as e:
                 logger.warning("Failed to broadcast block to %s: %s", peer, e)
                 results[peer] = f"error: {e}"
+        self.db.commit()
         return results
 
     def broadcast_transaction(self, tx: Transaction) -> dict[str, str]:
@@ -46,17 +109,19 @@ class NodeManager:
         tx_data = tx.to_dict()
         for peer in self.get_nodes():
             try:
-                url = f"http://{peer}/transactions/new"
+                url = f"http://{peer}/api/transactions/new"
                 resp = self._client.post(url, json=tx_data)
                 results[peer] = resp.text
+                self.db.add_peer(peer)
             except Exception as e:
                 logger.warning("Failed to broadcast tx to %s: %s", peer, e)
                 results[peer] = f"error: {e}"
+        self.db.commit()
         return results
 
     def fetch_chain_from_peer(self, peer: str) -> Optional[list[dict]]:
         try:
-            url = f"http://{peer}/chain?limit=10000&offset=0"
+            url = f"http://{peer}/api/chain?limit=10000&offset=0"
             resp = self._client.get(url)
             if resp.status_code == 200:
                 return resp.json()
@@ -64,14 +129,14 @@ class NodeManager:
             logger.warning("Failed to fetch chain from %s: %s", peer, e)
         return None
 
-    def fetch_mempool_from_peer(self, peer: str) -> Optional[list[dict]]:
+    def fetch_stats_from_peer(self, peer: str) -> Optional[dict]:
         try:
-            url = f"http://{peer}/mempool"
+            url = f"http://{peer}/api/stats"
             resp = self._client.get(url)
             if resp.status_code == 200:
                 return resp.json()
-        except Exception as e:
-            logger.warning("Failed to fetch mempool from %s: %s", peer, e)
+        except Exception:
+            pass
         return None
 
     def resolve_conflicts(self) -> bool:
@@ -84,11 +149,9 @@ class NodeManager:
 
         for peer in peers:
             try:
-                url = f"http://{peer}/stats"
-                resp = self._client.get(url)
-                if resp.status_code != 200:
+                stats = self.fetch_stats_from_peer(peer)
+                if not stats:
                     continue
-                stats = resp.json()
                 remote_height = stats.get("height", 0)
 
                 if remote_height > local_height:
@@ -118,5 +181,9 @@ class NodeManager:
         logger.info("Chain replaced with %d blocks", len(remote_chain))
         return True
 
+    def stop(self):
+        self._running = False
+
     def close(self):
+        self._running = False
         self._client.close()
