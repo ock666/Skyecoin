@@ -66,10 +66,11 @@ class ChainManager:
         return self.db.get_utxos_for_address(address)
 
     def accept_block(self, block: Block) -> tuple[bool, str]:
-        if block.block_index != self.db.get_block_count() + 1:
-            return False, f"Invalid block index: {block.block_index}"
-
         last_block = self.db.get_last_block()
+        expected_index = (last_block["block_index"] + 1) if last_block else 0
+        if block.block_index != expected_index:
+            return False, f"Invalid block index: {block.block_index} (expected {expected_index})"
+
         if last_block and block.previous_hash != last_block["block_hash"]:
             return False, "Invalid previous hash"
 
@@ -91,14 +92,34 @@ class ChainManager:
 
     def _update_utxos_for_block(self, block: Block):
         for tx in block.transactions:
-            if tx.sender != "COINBASE":
-                self.db.spend_utxos(tx.tx_hash)
-            self.db.add_utxo(tx.tx_hash, 0, tx.recipient, tx.amount)
+            if tx.sender == "COINBASE":
+                self.db.add_utxo(tx.tx_hash, 0, tx.recipient, tx.amount)
+            else:
+                needed = tx.amount + tx.fee
+                utxos = self.db.get_utxos_for_address(tx.sender)
+                spent = 0.0
+                for utxo in utxos:
+                    if spent >= needed:
+                        break
+                    self.db.execute("UPDATE utxos SET spent = 1 WHERE id = ?", (utxo["id"],))
+                    spent += utxo["amount"]
+                self.db.add_utxo(tx.tx_hash, 0, tx.recipient, tx.amount)
+                if spent > needed:
+                    change = spent - needed
+                    change_tx_hash = tx.tx_hash + "_change"
+                    self.db.add_utxo(change_tx_hash, 0, tx.sender, change)
         self.db.commit()
 
     def rebuild_utxo_set(self):
         logger.info("Rebuilding UTXO set...")
-        self.db.rebuild_utxos()
+        self.db.execute("DELETE FROM utxos")
+        blocks = self.db.fetchall("SELECT block_index FROM blocks ORDER BY block_index")
+        for row in blocks:
+            block_data = self.db.get_block(row["block_index"])
+            if block_data:
+                block = Block.from_dict(block_data)
+                self._update_utxos_for_block(block)
+        self.db.commit()
         logger.info("UTXO set rebuilt")
 
     def get_chain_stats(self) -> dict:

@@ -1,7 +1,5 @@
 import logging
-import json
 from pathlib import Path
-from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
@@ -17,8 +15,6 @@ from serpentcoin.api.schemas import (
     TransactionRequest,
     PeerRegisterRequest,
     StatsResponse,
-    BlockResponse,
-    BlockDetailResponse,
     BalanceResponse,
     WalletResponse,
     MessageResponse,
@@ -46,7 +42,7 @@ def create_app(config: Config) -> FastAPI:
 
     chain.initialize(wallet["address"], wallet["public_key"])
 
-    web_dir = Path(__file__).parent.parent / "web"
+    web_dir = Path(__file__).parent / "web"
     app.mount("/static", StaticFiles(directory=str(web_dir / "static")), name="static")
     templates = Jinja2Templates(directory=str(web_dir / "templates"))
 
@@ -58,10 +54,9 @@ def create_app(config: Config) -> FastAPI:
     async def index(request: Request):
         stats = chain.get_chain_stats()
         blocks = chain.get_recent_blocks(limit=10)
-        w = db.get_wallet()
+        w = dict(db.get_wallet())
         w["_balance"] = chain.get_balance(w["address"])
-        return templates.TemplateResponse("index.html", {
-            "request": request,
+        return templates.TemplateResponse(request, "index.html", {
             "stats": stats,
             "blocks": blocks,
             "peers": nodes.get_nodes(),
@@ -73,54 +68,54 @@ def create_app(config: Config) -> FastAPI:
     async def view_stats(request: Request):
         stats = chain.get_chain_stats()
         stats["peer_count"] = len(nodes.get_nodes())
-        return templates.TemplateResponse("partials/stats.html", {
-            "request": request, "stats": stats,
+        return templates.TemplateResponse(request, "partials/stats.html", {
+            "stats": stats,
         })
 
     @app.get("/views/blocks", response_class=HTMLResponse)
     async def view_blocks(request: Request, limit: int = 10):
         blocks = chain.get_recent_blocks(limit=limit)
-        return templates.TemplateResponse("partials/block_list.html", {
-            "request": request, "blocks": blocks,
+        return templates.TemplateResponse(request, "partials/block_list.html", {
+            "blocks": blocks,
         })
 
     @app.get("/views/mempool", response_class=HTMLResponse)
     async def view_mempool(request: Request):
         txs = mempool.get_all()
-        return templates.TemplateResponse("partials/mempool.html", {
-            "request": request, "mempool_txs": txs,
+        return templates.TemplateResponse(request, "partials/mempool.html", {
+            "mempool_txs": txs,
         })
 
     @app.get("/views/peers", response_class=HTMLResponse)
     async def view_peers(request: Request):
         peers = nodes.get_nodes()
-        return templates.TemplateResponse("partials/peers.html", {
-            "request": request, "peers": peers,
+        return templates.TemplateResponse(request, "partials/peers.html", {
+            "peers": peers,
         })
 
     @app.get("/views/history/{address}", response_class=HTMLResponse)
     async def view_history(request: Request, address: str, limit: int = 20):
         txs = chain.get_address_history(address, limit=limit)
-        return templates.TemplateResponse("partials/history.html", {
-            "request": request, "transactions": txs, "address": address,
+        return templates.TemplateResponse(request, "partials/history.html", {
+            "transactions": txs, "address": address,
         })
 
     # =========================================================================
     # REST API Routes (JSON)
     # =========================================================================
 
-    @app.get("/api/stats", response_model=StatsResponse)
+    @app.get("/api/stats")
     async def get_stats():
         stats = chain.get_chain_stats()
-        return StatsResponse(
-            height=stats["height"],
-            difficulty=stats["difficulty"],
-            mempool_size=stats["mempool_size"],
-            peer_count=len(nodes.get_nodes()),
-            last_block_hash=stats["last_block_hash"],
-            last_block_time=stats["last_block_time"],
-            total_transactions=stats["total_transactions"],
-        )
+        return {
+            "height": stats["height"],
+            "difficulty": stats["difficulty"],
+            "mempool_size": stats["mempool_size"],
+            "peer_count": len(nodes.get_nodes()),
+            "last_block_hash": stats["last_block_hash"],
+            "last_block_time": stats["last_block_time"],
+            "total_transactions": stats["total_transactions"],
+        }
 
     @app.get("/api/chain")
     async def get_chain(limit: int = 50, offset: int = 0):
@@ -137,10 +132,10 @@ def create_app(config: Config) -> FastAPI:
     async def get_mempool():
         return [tx.to_dict() for tx in mempool.get_all()]
 
-    @app.get("/api/balance/{address}", response_model=BalanceResponse)
+    @app.get("/api/balance/{address}")
     async def get_balance(address: str):
         balance = chain.get_balance(address)
-        return BalanceResponse(address=address, balance=balance)
+        return {"address": address, "balance": balance}
 
     @app.get("/api/history/{address}")
     async def get_history(address: str, limit: int = 50):
@@ -195,13 +190,6 @@ def create_app(config: Config) -> FastAPI:
         if not validate_block(block):
             raise HTTPException(status_code=400, detail="Block validation failed")
 
-        last_block = chain.get_last_block()
-        if last_block and block.block_index <= last_block["block_index"]:
-            raise HTTPException(status_code=400, detail="Block index too low")
-
-        if last_block and block.previous_hash != last_block["block_hash"]:
-            raise HTTPException(status_code=400, detail="Previous hash mismatch")
-
         accepted, msg = chain.accept_block(block)
         if not accepted:
             raise HTTPException(status_code=400, detail=msg)
@@ -221,28 +209,28 @@ def create_app(config: Config) -> FastAPI:
             return MessageResponse(message="Chain was updated from peers")
         return MessageResponse(message="Chain is already up to date")
 
-    @app.get("/api/wallet", response_model=WalletResponse)
+    @app.get("/api/wallet")
     async def get_wallet():
         w = db.get_wallet()
         balance = chain.get_balance(w["address"])
-        return WalletResponse(
-            address=w["address"],
-            public_key=w["public_key"],
-            private_key=w["private_key"],
-            balance=balance,
-        )
+        return {
+            "address": w["address"],
+            "public_key": w["public_key"],
+            "private_key": w["private_key"],
+            "balance": balance,
+        }
 
-    @app.post("/api/wallet/generate", response_model=WalletResponse)
+    @app.post("/api/wallet/generate")
     async def generate_wallet():
         priv_pem, pub_pem, address = generate_keypair()
         db.set_wallet(priv_pem, pub_pem, address)
         balance = chain.get_balance(address)
-        return WalletResponse(
-            address=address,
-            public_key=pub_pem,
-            private_key=priv_pem,
-            balance=balance,
-        )
+        return {
+            "address": address,
+            "public_key": pub_pem,
+            "private_key": priv_pem,
+            "balance": balance,
+        }
 
     @app.get("/api/transactions/{tx_hash}")
     async def get_transaction(tx_hash: str):

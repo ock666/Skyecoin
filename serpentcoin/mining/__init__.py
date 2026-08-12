@@ -24,7 +24,7 @@ def mine_block(block: Block, stop_event=None) -> bool:
         if stop_event and stop_event.is_set():
             return False
 
-        block.nonce = random.randint(0, 2**64 - 1)
+        block.nonce = random.randint(0, 2**63 - 1)
         block.timestamp = time.time()
         header_hash = block.header_hash()
         hash_int = int.from_bytes(

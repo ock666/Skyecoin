@@ -102,8 +102,8 @@ class Database:
         self.conn.close()
 
     def get_block_count(self) -> int:
-        row = self.fetchone("SELECT MAX(block_index) as c FROM blocks")
-        return row["c"] or 0
+        row = self.fetchone("SELECT COUNT(*) as c FROM blocks")
+        return row["c"] if row else 0
 
     def get_block(self, block_index: int) -> Optional[dict]:
         row = self.fetchone("SELECT * FROM blocks WHERE block_index = ?", (block_index,))
@@ -130,10 +130,10 @@ class Database:
         return block
 
     def get_last_block(self) -> Optional[dict]:
-        count = self.get_block_count()
-        if count == 0:
+        row = self.fetchone("SELECT MAX(block_index) as idx FROM blocks")
+        if not row or row["idx"] is None:
             return None
-        return self.get_block(count)
+        return self.get_block(row["idx"])
 
     def insert_block(self, block: dict) -> bool:
         try:
