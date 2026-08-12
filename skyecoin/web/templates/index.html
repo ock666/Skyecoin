@@ -29,6 +29,7 @@
             Peers <span id="peer-badge">{{ peers|length }}</span>
         </button>
         <button class="tab-btn" onclick="switchTab('api')">API</button>
+        <button class="tab-btn" onclick="switchTab('achievements')">🏆</button>
     </nav>
 
     <main>
@@ -172,6 +173,16 @@
                 <pre class="json-view" id="api-json">Loading...</pre>
             </div>
         </div>
+
+        <!-- Achievements -->
+        <div id="tab-achievements" class="tab-content">
+            <div class="card">
+                <h2>🏆 Achievements</h2>
+                <div id="achievements-grid" class="achievements-grid">
+                    <div class="empty-state">Loading achievements...</div>
+                </div>
+            </div>
+        </div>
     </main>
 
     <footer>
@@ -192,6 +203,7 @@
             document.getElementById('ws-status').textContent = '⚡ Connected';
             document.getElementById('ws-status').style.color = 'var(--green)';
             document.getElementById('live-indicator').innerHTML = '⚡ Live';
+            fetchReward();
         };
         ws.onclose = () => {
             document.getElementById('ws-status').textContent = '⏳ Reconnecting...';
@@ -341,6 +353,9 @@
                 document.getElementById('api-json').textContent = JSON.stringify(data, null, 2);
             });
         }
+        if (name === 'achievements') {
+            loadAchievements();
+        }
         if (name === 'mempool' || name === 'peers') {
             fetch('/views/' + name).then(r => r.text()).then(html => {
                 document.getElementById(name + '-content') && (document.getElementById(name + '-content').innerHTML = html);
@@ -437,6 +452,26 @@
                 document.getElementById('peer-result').innerHTML = '<div class="flash success">' + data.message + '</div>';
                 document.getElementById('peer-address').value = '';
             });
+    }
+
+    function fetchReward() {
+        fetch('/api/reward').then(r => r.json()).then(data => {
+            document.getElementById('stat-reward').textContent = data.coinbase_reward.toFixed(4) + ' SC';
+        });
+    }
+
+    function loadAchievements() {
+        fetch('/api/achievements').then(r => r.json()).then(data => {
+            let html = '<div class="flex-row" style="margin-bottom:12px;"><span class="mono">' + data.earned + '/' + data.badges.length + ' earned</span></div><div class="achievements-grid">';
+            data.badges.forEach(b => {
+                html += '<div class="achievement' + (b.earned ? '' : ' locked') + '" title="' + b.desc + '">';
+                html += '<span class="achievement-icon">' + b.icon + '</span>';
+                html += '<span class="achievement-name">' + b.name + '</span>';
+                html += '</div>';
+            });
+            html += '</div>';
+            document.getElementById('achievements-grid').innerHTML = html;
+        });
     }
 
     // ===== Init =====

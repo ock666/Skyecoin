@@ -331,7 +331,64 @@ def create_app(config: Config) -> FastAPI:
             "balance": balance,
         }
 
+    @app.get("/api/utxo/{address}")
+    async def get_utxos(address: str):
+        utxos = chain.get_utxos(address)
+        current_height = chain.db.get_block_count()
+        return {
+            "address": address,
+            "utxos": utxos,
+            "count": len(utxos),
+            "current_height": current_height,
+            "total_value": sum(u["amount"] for u in utxos),
+        }
+
+    @app.get("/api/block/diff/{block_index}")
+    async def block_diff(block_index: int):
+        current = chain.get_block(block_index)
+        if not current:
+            raise HTTPException(status_code=404, detail="Block not found")
+        previous = chain.get_block(block_index - 1) if block_index > 0 else None
+        diff = {
+            "block_index": block_index,
+            "hash": current["block_hash"],
+            "previous_hash": current["previous_hash"],
+        }
+        if previous:
+            time_diff = current["timestamp"] - previous["timestamp"]
+            diff["time_since_previous"] = round(time_diff, 1)
+            diff["nonce_delta"] = current["nonce"] - previous["nonce"]
+            diff["tx_count_prev"] = len(previous.get("transactions", []))
+            diff["tx_count_curr"] = len(current.get("transactions", []))
+            diff["same_miner"] = current["miner_address"] == previous["miner_address"]
+        return diff
+
+    @app.get("/api/achievements")
+    async def get_achievements():
+        count = chain.db.get_block_count()
+        last = chain.db.get_last_block()
+        current_reward = chain.get_current_reward()
+        total_txs = chain.db.fetchone("SELECT COUNT(*) as c FROM transactions")["c"]
+
+        badges = []
+        badges.append({"name": "Genesis", "icon": "🌍", "earned": True, "desc": "Genesis block created"})
+        badges.append({"name": "Miner", "icon": "⛏️", "earned": count > 1, "desc": "Mine your first block"})
+        badges.append({"name": "Centurion", "icon": "💯", "earned": count >= 100, "desc": "100 blocks mined"})
+        badges.append({"name": "Millennium", "icon": "🏛️", "earned": count >= 1000, "desc": "1000 blocks mined"})
+        badges.append({"name": "Trader", "icon": "💸", "earned": total_txs > 1, "desc": "First transaction sent"})
+        badges.append({"name": "Halving", "icon": "🪙", "earned": current_reward < 50.0, "desc": "Survived a halving"})
+        badges.append({"name": "Whale", "icon": "🐋", "earned": chain.get_balance(wallet["address"]) >= 10000, "desc": "10,000 SC balance"})
+        badges.append({"name": "Burning", "icon": "🔥", "earned": False, "desc": "Burn some coins"})
+        badges.append({"name": "Networker", "icon": "🌐", "earned": len(nodes.get_nodes()) > 0, "desc": "Connect to a peer"})
+        badges.append({"name": "Lucky", "icon": "🍀", "earned": False, "desc": "Win a block lottery"})
+        return {"badges": badges, "earned": sum(1 for b in badges if b["earned"])}
+
     @app.get("/api/transactions/{tx_hash}")
+    async def get_transaction(tx_hash: str):
+        row = db.fetchone("SELECT * FROM transactions WHERE tx_hash = ?", (tx_hash,))
+        if not row:
+            raise HTTPException(status_code=404, detail="Transaction not found")
+        return dict(row)
     async def get_transaction(tx_hash: str):
         row = db.fetchone("SELECT * FROM transactions WHERE tx_hash = ?", (tx_hash,))
         if not row:

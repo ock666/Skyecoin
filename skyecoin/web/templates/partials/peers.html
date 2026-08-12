@@ -1,17 +1,17 @@
 {% if peers %}
-<table>
-    <thead>
-        <tr><th>#</th><th>Address</th></tr>
-    </thead>
-    <tbody>
+<div class="peer-graph" id="peer-graph">
+    <div class="peer-node local">
+        <div class="peer-dot"></div>
+        <span class="peer-label mono">this node</span>
+    </div>
     {% for peer in peers %}
-        <tr>
-            <td>{{ loop.index }}</td>
-            <td><span class="mono">{{ peer }}</span></td>
-        </tr>
+    <div class="peer-node">
+        <div class="peer-dot"></div>
+        <span class="peer-label mono">{{ peer }}</span>
+    </div>
+    <div class="peer-line"></div>
     {% endfor %}
-    </tbody>
-</table>
+</div>
 {% else %}
 <div class="empty-state">No peers connected. Add one to sync with other nodes!</div>
 {% endif %}
