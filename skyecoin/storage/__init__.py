@@ -40,7 +40,8 @@ CREATE TABLE IF NOT EXISTS utxos (
     output_index INTEGER NOT NULL DEFAULT 0,
     address TEXT NOT NULL,
     amount REAL NOT NULL,
-    spent INTEGER NOT NULL DEFAULT 0
+    spent INTEGER NOT NULL DEFAULT 0,
+    lock_until_block INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_utxos_address ON utxos(address, spent);
@@ -190,6 +191,13 @@ class Database:
         self.execute(
             "INSERT INTO utxos (tx_hash, output_index, address, amount) VALUES (?, ?, ?, ?)",
             (tx_hash, output_index, address, amount),
+        )
+        self.commit()
+
+    def add_utxo_with_lock(self, tx_hash: str, output_index: int, address: str, amount: float, lock_until_block: int = 0):
+        self.execute(
+            "INSERT INTO utxos (tx_hash, output_index, address, amount, lock_until_block) VALUES (?, ?, ?, ?, ?)",
+            (tx_hash, output_index, address, amount, lock_until_block),
         )
         self.commit()
 

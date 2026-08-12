@@ -19,6 +19,9 @@ class Config:
     bootstrap_nodes: list[str] = field(default_factory=list)
     data_dir: str = "data"
     db_name: str = "skyecoin.db"
+    halving_interval: int = 2100
+    lottery_bonus: float = 25.0
+    min_lottery_zeros: int = 4
 
     @classmethod
     def load(cls, path: Optional[str] = None) -> "Config":

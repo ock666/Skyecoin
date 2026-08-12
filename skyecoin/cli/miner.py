@@ -137,10 +137,16 @@ def mine_via_node(node_url: str, miner_private_key_pem: str):
             pending_txs = [Transaction.from_dict(tx) for tx in mempool_data]
             total_fees = sum(tx.fee for tx in pending_txs)
 
+            try:
+                reward_info = fetch_json(f"{node_url}/api/reward")
+                current_reward = reward_info["coinbase_reward"]
+            except Exception:
+                current_reward = 50.0
+
             coinbase = create_coinbase_transaction(
                 miner_address=miner_address,
                 block_index=block_index,
-                coinbase_reward=50.0,
+                coinbase_reward=current_reward,
                 total_fees=total_fees,
             )
 

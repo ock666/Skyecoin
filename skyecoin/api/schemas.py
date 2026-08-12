@@ -7,6 +7,7 @@ class TransactionRequest(BaseModel):
     recipient: str = Field(min_length=1, max_length=128)
     amount: float = Field(gt=0)
     fee: float = Field(default=0.0, ge=0)
+    lock_until_block: int = Field(default=0, ge=0)
 
 
 class TransactionResponse(BaseModel):

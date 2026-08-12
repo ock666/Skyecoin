@@ -50,6 +50,25 @@ class ChainManager:
             self._update_utxos_for_block(genesis)
             logger.info("Genesis block created: %s", genesis.block_hash)
 
+    def get_current_reward(self) -> float:
+        height = self.db.get_block_count()
+        if height == 0:
+            return self.config.coinbase_reward
+        halvings = (height - 1) // self.config.halving_interval
+        reward = self.config.coinbase_reward / (2 ** halvings)
+        return max(reward, 0.000001)
+
+    def check_lottery(self, block_hash: str, nonce: int) -> tuple[bool, str]:
+        suffix = block_hash[-self.config.min_lottery_zeros:]
+        prefix = block_hash[:self.config.min_lottery_zeros]
+        if suffix == "0" * self.config.min_lottery_zeros:
+            return True, f"Golden suffix: {self.config.lottery_bonus} SC bonus!"
+        if prefix == "0" * self.config.min_lottery_zeros:
+            return True, f"Golden prefix: {self.config.lottery_bonus} SC bonus!"
+        if nonce % 777777 == 0:
+            return True, f"Lucky nonce: {self.config.lottery_bonus} SC bonus!"
+        return False, ""
+
     def get_last_block(self) -> Optional[dict]:
         return self.db.get_last_block()
 
@@ -77,6 +96,20 @@ class ChainManager:
         if not validate_block(block):
             return False, "Block validation failed"
 
+        expected_reward = self.get_current_reward()
+        won, lottery_msg = self.check_lottery(block.block_hash, block.nonce)
+        if won:
+            expected_reward += self.config.lottery_bonus
+
+        total_fees = sum(tx.fee for tx in block.transactions if tx.sender != "COINBASE")
+        coinbase = next((tx for tx in block.transactions if tx.sender == "COINBASE"), None)
+        if coinbase:
+            if abs(coinbase.amount - (expected_reward + total_fees)) > 0.0001:
+                return False, f"Invalid coinbase: {coinbase.amount} != {expected_reward + total_fees}"
+
+        if expected_reward < self.config.coinbase_reward:
+            logger.info("Halving at block %d: reward now %.6f SC", block.block_index, expected_reward)
+
         block_dict = block.to_dict()
         if not self.db.insert_block(block_dict):
             return False, "Block already exists"
@@ -87,27 +120,34 @@ class ChainManager:
         self.mempool.remove_transactions(included_hashes)
         self.mempool.purge_expired()
 
-        logger.info("Accepted block %d: %s (%d txs)", block.block_index, block.block_hash[:12], len(block.transactions))
-        return True, "Block accepted"
+        status = "Accepted"
+        if won:
+            status = f"Lottery won! {lottery_msg}"
+        logger.info("%s block %d: %s (%d txs)", status, block.block_index, block.block_hash[:12], len(block.transactions))
+        return True, f"Block {status.lower()}"
 
     def _update_utxos_for_block(self, block: Block):
         for tx in block.transactions:
             if tx.sender == "COINBASE":
-                self.db.add_utxo(tx.tx_hash, 0, tx.recipient, tx.amount)
+                self.db.add_utxo_with_lock(tx.tx_hash, 0, tx.recipient, tx.amount, 0)
             else:
                 needed = tx.amount + tx.fee
-                utxos = self.db.get_utxos_for_address(tx.sender)
+                utxos = [
+                    u for u in self.db.get_utxos_for_address(tx.sender)
+                    if u.get("lock_until_block", 0) <= block.block_index
+                ]
                 spent = 0.0
                 for utxo in utxos:
                     if spent >= needed:
                         break
                     self.db.execute("UPDATE utxos SET spent = 1 WHERE id = ?", (utxo["id"],))
                     spent += utxo["amount"]
-                self.db.add_utxo(tx.tx_hash, 0, tx.recipient, tx.amount)
+                lock_height = getattr(tx, "lock_until_block", 0)
+                self.db.add_utxo_with_lock(tx.tx_hash, 0, tx.recipient, tx.amount, lock_height)
                 if spent > needed:
                     change = spent - needed
                     change_tx_hash = tx.tx_hash + "_change"
-                    self.db.add_utxo(change_tx_hash, 0, tx.sender, change)
+                    self.db.add_utxo_with_lock(change_tx_hash, 0, tx.sender, change, 0)
         self.db.commit()
 
     def rebuild_utxo_set(self):

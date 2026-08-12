@@ -186,6 +186,20 @@ def create_app(config: Config) -> FastAPI:
             "adjust_interval": config.difficulty_adjust_interval,
         }
 
+    @app.get("/api/reward")
+    async def get_reward():
+        height = chain.db.get_block_count()
+        halvings = (height - 1) // config.halving_interval if height > 0 else 0
+        return {
+            "coinbase_reward": chain.get_current_reward(),
+            "original_reward": config.coinbase_reward,
+            "halving_interval": config.halving_interval,
+            "halvings_so_far": max(0, halvings),
+            "next_halving_at": ((halvings + 1) * config.halving_interval) if height > 0 else config.halving_interval,
+            "lottery_bonus": config.lottery_bonus,
+            "lottery_zeros_needed": config.min_lottery_zeros,
+        }
+
     @app.post("/api/transactions/new", response_model=MessageResponse)
     async def new_transaction(tx_req: TransactionRequest):
         private_key = tx_req.sender_private_key or wallet["private_key"]
@@ -195,6 +209,7 @@ def create_app(config: Config) -> FastAPI:
                 recipient=tx_req.recipient,
                 amount=tx_req.amount,
                 fee=tx_req.fee,
+                lock_until_block=tx_req.lock_until_block,
             )
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Failed to create transaction: {e}")

@@ -26,6 +26,7 @@ class Transaction:
         timestamp: Optional[float] = None,
         public_key_hex_str: str = "",
         private_key_pem: str = "",
+        lock_until_block: int = 0,
     ):
         self.sender = sender
         self.recipient = recipient
@@ -36,6 +37,7 @@ class Transaction:
         self.signature = ""
         self._private_key_pem = private_key_pem
         self.tx_hash = ""
+        self.lock_until_block = lock_until_block
 
     def compute_hash(self) -> str:
         data = {
@@ -45,6 +47,7 @@ class Transaction:
             "fee": self.fee,
             "timestamp": self.timestamp,
             "public_key": self.public_key_hex,
+            "lock_until_block": self.lock_until_block,
         }
         payload = json.dumps(data, sort_keys=True).encode()
         return hashlib.sha256(payload).hexdigest()
@@ -87,6 +90,7 @@ class Transaction:
             "public_key": self.public_key_hex,
             "signature": self.signature,
             "tx_hash": self.tx_hash,
+            "lock_until_block": self.lock_until_block,
         }
 
     @classmethod
@@ -101,6 +105,7 @@ class Transaction:
         tx.public_key_hex = data.get("public_key", "")
         tx.signature = data.get("signature", "")
         tx.tx_hash = data.get("tx_hash", "")
+        tx.lock_until_block = data.get("lock_until_block", 0)
         return tx
 
 
@@ -122,12 +127,14 @@ def create_transaction(
     recipient: str,
     amount: float,
     fee: float = 0.0,
+    lock_until_block: int = 0,
 ) -> Transaction:
     tx = Transaction(
         sender="",
         recipient=recipient,
         amount=amount,
         fee=fee,
+        lock_until_block=lock_until_block,
     )
     tx.sign(private_key_pem=sender_private_key_pem)
     return tx
