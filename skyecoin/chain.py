@@ -169,7 +169,7 @@ class ChainManager:
             "height": count,
             "last_block_hash": last["block_hash"] if last else None,
             "last_block_time": last["timestamp"] if last else None,
-            "difficulty": last["difficulty"] if last else self.config.difficulty,
+            "difficulty": calculate_difficulty(self.db, self.config),
             "mempool_size": self.mempool.size(),
             "total_transactions": self._count_transactions(),
         }
@@ -190,6 +190,12 @@ class ChainManager:
             b["tx_count"] = tx_count
             blocks.append(b)
         return blocks
+
+    def get_total_burned(self) -> float:
+        row = self.db.fetchone(
+            "SELECT COALESCE(SUM(amount), 0) as bal FROM utxos WHERE address LIKE 'BURN%' AND spent = 0"
+        )
+        return row["bal"] if row else 0.0
 
     def get_address_history(self, address: str, limit: int = 50) -> list[dict]:
         rows = self.db.fetchall(

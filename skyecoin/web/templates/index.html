@@ -8,11 +8,15 @@
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
     <script src="https://unpkg.com/htmx.org@1.9.10/dist/ext/json-enc.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
 </head>
 <body>
     <header>
-        <h1><span class="icon">🐍</span> Skyecoin Explorer</h1>
-        <span class="node-info" id="ws-status">v2.0.0</span>
+        <h1><span class="icon">☄️</span> Skyecoin Explorer</h1>
+        <div class="header-right">
+            <span class="node-info" id="ws-status">v2.0.0</span>
+            <a href="/logout" class="btn secondary" style="padding: 6px 14px; font-size: 0.75em; text-decoration: none;">Logout</a>
+        </div>
     </header>
 
     <div class="stats-bar" id="stats-bar">
@@ -36,6 +40,7 @@
         <button class="tab-btn" onclick="switchTab('addresses')">📒</button>
         <button class="tab-btn" onclick="switchTab('sandbox')">🔧</button>
         <button class="tab-btn" onclick="switchTab('leaderboard')">🏅</button>
+        <button class="tab-btn" onclick="switchTab('pool')">🖧</button>
     </nav>
 
     <main>
@@ -107,6 +112,12 @@
 
             <div class="card">
                 <h2>💸 Send Transaction</h2>
+                <div class="flex-row" style="margin-bottom: 12px;">
+                    <button class="secondary" onclick="estimateFee('economy')" style="font-size:0.75em;padding:6px 10px;">🐢 Slow</button>
+                    <button class="secondary" onclick="estimateFee('normal')" style="font-size:0.75em;padding:6px 10px;">🚶 Normal</button>
+                    <button class="secondary" onclick="estimateFee('fast')" style="font-size:0.75em;padding:6px 10px;">🚀 Fast</button>
+                    <span id="fee-estimate-hint" style="font-size:0.7em;color:var(--text-muted);"></span>
+                </div>
                 <form hx-post="/api/transactions/new" hx-ext="json-enc" hx-target="#send-result" hx-swap="innerHTML">
                     <label>
                         Recipient Address
@@ -114,14 +125,19 @@
                     </label>
                     <label>
                         Amount (SC)
-                        <input type="number" name="amount" step="0.000001" min="0.000001" required>
+                        <input type="number" name="amount" id="send-amount" step="0.000001" min="0.000001" required>
                     </label>
                     <label>
                         Fee (SC)
-                        <input type="number" name="fee" step="0.000001" min="0" value="0.001">
+                        <input type="number" name="fee" id="send-fee" step="0.000001" min="0" value="0.001">
+                    </label>
+                    <label>
+                        Lock until block <span style="color:var(--text-muted);font-size:0.7em;">(0 = no lock)</span>
+                        <input type="number" name="lock_until_block" min="0" value="0">
                     </label>
                     <button type="submit">Send Transaction</button>
                 </form>
+                <button class="danger" onclick="burnCoins()" style="margin-top:8px;">🔥 Burn Coins</button>
                 <div id="send-result" style="margin-top: 12px;"></div>
             </div>
 
@@ -143,8 +159,9 @@
                     <button hx-post="/api/peers/resolve" hx-target="#peer-result" hx-swap="innerHTML" class="secondary">Resolve Conflicts</button>
                 </div>
                 <div id="peer-result"></div>
-                <div id="peers-list">
-                    {% include "partials/peers.html" %}
+                <div id="peer-graph-container" style="width:100%;height:420px;position:relative;">
+                    <svg id="peer-graph-svg" style="width:100%;height:100%;"></svg>
+                    <div id="peer-tooltip" style="display:none;position:absolute;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-size:0.75em;pointer-events:none;z-index:10;max-width:280px;"></div>
                 </div>
             </div>
         </div>
@@ -325,6 +342,30 @@
                 </div>
             </div>
         </div>
+
+        <!-- Pool -->
+        <div id="tab-pool" class="tab-content">
+            <div class="card">
+                <h2>🖧 Mining Pool</h2>
+                <div id="pool-stats-container" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;margin-bottom:16px;">
+                    <div class="stat"><span class="stat-label">Pool Hashrate</span><span class="stat-value highlight" id="pool-hr">---</span></div>
+                    <div class="stat"><span class="stat-label">Workers</span><span class="stat-value green" id="pool-workers">0</span></div>
+                    <div class="stat"><span class="stat-label">Shares</span><span class="stat-value" id="pool-shares">0</span></div>
+                    <div class="stat"><span class="stat-label">Blocks Found</span><span class="stat-value yellow" id="pool-blocks">0</span></div>
+                    <div class="stat"><span class="stat-label">Pool Fee</span><span class="stat-value" id="pool-fee">1%</span></div>
+                    <div class="stat"><span class="stat-label">Pool Diff</span><span class="stat-value" id="pool-diff">8</span></div>
+                </div>
+                <h3>Worker Connection</h3>
+                <div class="card" style="background:var(--code-bg);margin-bottom:16px;">
+                    <p style="font-size:0.75em;color:var(--text-muted);margin-bottom:8px;">Run a pool worker with this command-line miner:</p>
+                    <pre class="json-view" style="font-size:0.7em;padding:8px 12px;" id="pool-connect-cmd">python -m skyecoin.cli.miner --pool http://host:5000 --address YOUR_KEY</pre>
+                </div>
+                <div style="margin-top:16px;">
+                    <button class="secondary" onclick="loadPoolStats()">Refresh Stats</button>
+                </div>
+                <div id="pool-worker-list" style="margin-top:16px;"></div>
+            </div>
+        </div>
     </main>
 
     <footer>
@@ -433,8 +474,124 @@
         const el = document.getElementById('flash-container');
         el.innerHTML = `<div class="flash info">🌐 Peer joined: ${data.address}</div>`;
         setTimeout(() => el.innerHTML = '', 4000);
-        fetch('/views/peers').then(r => r.text()).then(html => {
-            document.getElementById('peers-list').innerHTML = html;
+        if (document.getElementById('tab-peers').classList.contains('active')) {
+            renderPeerGraph();
+        }
+    }
+
+    function renderPeerGraph() {
+        const svg = d3.select('#peer-graph-svg');
+        const tooltip = d3.select('#peer-tooltip');
+        svg.selectAll('*').remove();
+
+        fetch('/api/peers/graph').then(r => r.json()).then(data => {
+            const width = document.getElementById('peer-graph-container').clientWidth;
+            const height = 420;
+            svg.attr('viewBox', `0 0 ${width} ${height}`);
+
+            if (data.edges.length === 0) {
+                svg.append('text')
+                    .attr('x', width / 2)
+                    .attr('y', height / 2 - 40)
+                    .attr('text-anchor', 'middle')
+                    .attr('fill', 'var(--text-muted)')
+                    .style('font-size', '14px')
+                    .style('font-family', 'monospace')
+                    .text('🌐 No peers connected');
+                svg.append('text')
+                    .attr('x', width / 2)
+                    .attr('y', height / 2 - 10)
+                    .attr('text-anchor', 'middle')
+                    .attr('fill', 'var(--text-muted)')
+                    .style('font-size', '11px')
+                    .style('font-family', 'monospace')
+                    .text('Add one above to sync with the network');
+                svg.append('circle')
+                    .attr('cx', width / 2)
+                    .attr('cy', height / 2 + 40)
+                    .attr('r', 14)
+                    .attr('fill', 'var(--green)')
+                    .attr('class', 'peer-node-local');
+                svg.append('text')
+                    .attr('x', width / 2)
+                    .attr('y', height / 2 + 70)
+                    .attr('text-anchor', 'middle')
+                    .attr('fill', 'var(--text-muted)')
+                    .style('font-size', '10px')
+                    .style('font-family', 'monospace')
+                    .text('this node');
+                return;
+            }
+
+            const simulation = d3.forceSimulation(data.nodes)
+                .force('link', d3.forceLink(data.edges).id(d => d.id).distance(150))
+                .force('charge', d3.forceManyBody().strength(-400))
+                .force('center', d3.forceCenter(width / 2, height / 2))
+                .force('collision', d3.forceCollide().radius(50));
+
+            const link = svg.append('g')
+                .selectAll('line')
+                .data(data.edges)
+                .enter().append('line')
+                .attr('stroke', 'var(--border)')
+                .attr('stroke-width', 2)
+                .attr('stroke-dasharray', '6,3');
+
+            const node = svg.append('g')
+                .selectAll('g')
+                .data(data.nodes)
+                .enter().append('g')
+                .call(d3.drag()
+                    .on('start', (event, d) => { if (!event.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+                    .on('drag', (event, d) => { d.fx = event.x; d.fy = event.y; })
+                    .on('end', (event, d) => { if (!event.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; }));
+
+            node.append('circle')
+                .attr('r', d => d.is_local ? 16 : 10)
+                .attr('fill', d => {
+                    if (d.is_local) return 'var(--green)';
+                    if (d.status === 'online') return 'var(--accent)';
+                    if (d.status === 'slow') return 'var(--yellow)';
+                    return 'var(--red)';
+                })
+                .attr('stroke', d => d.is_local ? 'var(--green)' : 'var(--border)')
+                .attr('stroke-width', 2)
+                .attr('class', d => d.is_local ? 'peer-node-local' : '')
+                .style('cursor', 'pointer');
+
+            node.append('text')
+                .text(d => d.label.substring(0, 20) + (d.label.length > 20 ? '...' : ''))
+                .attr('text-anchor', 'middle')
+                .attr('dy', d => d.is_local ? -24 : -16)
+                .attr('fill', 'var(--text-muted)')
+                .style('font-size', '9px')
+                .style('font-family', 'monospace')
+                .style('pointer-events', 'none');
+
+            node.on('mouseenter', function(event, d) {
+                const lines = [`<b>${d.label}</b>`, `Status: ${d.status}`];
+                if (d.height != null) lines.push(`Height: ${d.height}`);
+                if (d.difficulty != null) lines.push(`Difficulty: ${d.difficulty}`);
+                if (d.latency != null) lines.push(`Latency: ${d.latency}ms`);
+                if (d.last_seen_seconds != null) lines.push(`Last seen: ${d.last_seen_seconds}s ago`);
+                tooltip.html(lines.join('<br>'))
+                    .style('display', 'block')
+                    .style('left', (event.pageX + 12) + 'px')
+                    .style('top', (event.pageY - 12) + 'px');
+            }).on('mousemove', function(event) {
+                tooltip.style('left', (event.pageX + 12) + 'px')
+                    .style('top', (event.pageY - 12) + 'px');
+            }).on('mouseleave', function() {
+                tooltip.style('display', 'none');
+            });
+
+            simulation.on('tick', () => {
+                link.attr('x1', d => d.source.x)
+                    .attr('y1', d => d.source.y)
+                    .attr('x2', d => d.target.x)
+                    .attr('y2', d => d.target.y);
+                node.attr('transform', d => `translate(${d.x},${d.y})`);
+            });
         });
     }
 
@@ -509,11 +666,16 @@
                 document.getElementById('sb-from').value = w.address;
             });
         }
-        if (name === 'mempool' || name === 'peers') {
-            fetch('/views/' + name).then(r => r.text()).then(html => {
-                document.getElementById(name + '-content') && (document.getElementById(name + '-content').innerHTML = html);
-                document.getElementById(name + 's-list') && (document.getElementById(name + 's-list').innerHTML = html);
+        if (name === 'mempool') {
+            fetch('/views/mempool').then(r => r.text()).then(html => {
+                document.getElementById('mempool-content') && (document.getElementById('mempool-content').innerHTML = html);
             });
+        }
+        if (name === 'peers') {
+            renderPeerGraph();
+        }
+        if (name === 'pool') {
+            loadPoolStats();
         }
     }
 
@@ -594,6 +756,35 @@
             document.getElementById('wallet-balance').textContent = data.balance.toFixed(6);
             document.getElementById('wallet-key-display').innerHTML = '';
             location.reload();
+        });
+    }
+
+    function estimateFee(speed) {
+        fetch('/api/fees/estimate').then(r => r.json()).then(data => {
+            const amount = parseFloat(document.getElementById('send-amount').value) || 0;
+            const txSizeEstimate = 250;
+            const feePerByte = data[speed];
+            const estimatedFee = (txSizeEstimate * feePerByte).toFixed(6);
+            document.getElementById('send-fee').value = estimatedFee;
+            const labels = {economy: 'Slow (~10 blocks)', normal: 'Normal (~3 blocks)', fast: 'Fast (~1 block)'};
+            document.getElementById('fee-estimate-hint').textContent = labels[speed] + ' @ ' + feePerByte.toFixed(8) + ' SC/byte';
+        });
+    }
+
+    function burnCoins() {
+        const amount = parseFloat(prompt('Amount to burn (SC):', '1.0'));
+        if (!amount || amount <= 0) return;
+        fetch('/api/wallet/key').then(r => r.json()).then(w => {
+            const burnAddr = 'BURN' + w.address.substring(4, 40);
+            const tx = {sender_private_key: w.private_key, recipient: burnAddr, amount: amount, fee: 0};
+            return fetch('/api/transactions/new', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(tx)
+            });
+        }).then(r => r.json()).then(data => {
+            document.getElementById('send-result').innerHTML =
+                '<div class="flash ' + (data.message ? 'success' : 'error') + '">🔥 ' + (data.message || data.detail) + '</div>';
         });
     }
 
@@ -856,6 +1047,35 @@
             });
             html += '</tbody></table>';
             document.getElementById('leaderboard-content').innerHTML = html;
+        });
+    }
+
+    function loadPoolStats() {
+        fetch('/pool/stats').then(r => {
+            if (!r.ok) { document.getElementById('pool-stats-container').innerHTML = '<div class="flash info">Pool not enabled. Set SKYECOIN_POOL_ENABLED=true in config.</div>'; return; }
+            return r.json();
+        }).then(data => {
+            if (!data) return;
+            document.getElementById('pool-hr').textContent = (data.pool_hashrate || 0).toFixed(1) + ' H/s';
+            document.getElementById('pool-workers').textContent = data.workers;
+            document.getElementById('pool-shares').textContent = data.total_shares;
+            document.getElementById('pool-blocks').textContent = data.blocks_found;
+            document.getElementById('pool-fee').textContent = data.pool_fee_percent + '%';
+            document.getElementById('pool-diff').textContent = data.pool_difficulty;
+
+            const host = location.host;
+            const keyHint = 'your-node-wallet-key';
+            document.getElementById('pool-connect-cmd').textContent =
+                `python -m skyecoin.cli.miner --pool http://${host} --pool-key ${keyHint}`;
+
+            if (data.workers_detail && data.workers_detail.length) {
+                let html = '<h3>Top Workers</h3><table><thead><tr><th>Worker</th><th>Name</th><th>Shares</th></tr></thead><tbody>';
+                data.workers_detail.forEach(w => {
+                    html += `<tr><td class="address mono">${w.address}</td><td>${w.name}</td><td>${w.shares}</td></tr>`;
+                });
+                html += '</tbody></table>';
+                document.getElementById('pool-worker-list').innerHTML = html;
+            }
         });
     }
 

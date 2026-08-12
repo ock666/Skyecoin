@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Skyecoin — Login</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <header>
+        <h1><span class="icon">☄️</span> Skyecoin Explorer</h1>
+        <span class="node-info">v2.0.0</span>
+    </header>
+
+    <main>
+        <div class="login-container">
+            <div class="login-card">
+                <h2>🔐 Login</h2>
+                {% if error %}
+                <div class="flash error">{{ error }}</div>
+                {% endif %}
+                {% if setup %}
+                <div class="flash success">{{ setup }}</div>
+                {% endif %}
+                <form method="POST" action="/login">
+                    <label>
+                        Password
+                        <input type="password" name="password" placeholder="Enter your password" required autofocus>
+                    </label>
+                    <button type="submit">Login</button>
+                </form>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        Skyecoin Node — Blockchain Explorer
+    </footer>
+</body>
+</html>

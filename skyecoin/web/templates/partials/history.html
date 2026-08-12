@@ -8,6 +8,7 @@
             <th>Amount</th>
             <th>Fee</th>
             <th>Block</th>
+            <th>Lock</th>
         </tr>
     </thead>
     <tbody>
@@ -25,17 +26,29 @@
             </td>
             <td><span class="hash short" title="{{ tx.tx_hash }}">{{ tx.tx_hash[:16] }}...</span></td>
             <td>
+                {% if tx.recipient.startswith('BURN') %}
+                    <span class="badge burn">🔥 BURN</span>
+                {% else %}
                 <span class="address">
                     {% if is_sent %}{{ tx.recipient[:12] }}...
                     {% elif tx.sender == 'COINBASE' %}Coinbase
                     {% else %}{{ tx.sender[:12] }}...{% endif %}
                 </span>
+                {% endif %}
             </td>
             <td class="amount{% if is_sent %} negative{% endif %}">
                 {{ "%.6f"|format(tx.amount) }} SC
             </td>
             <td>{{ "%.6f"|format(tx.fee|default(0)) }}</td>
             <td>{{ tx.block_index }}</td>
+            <td>
+                {% set lock = tx.get('lock_until_block', 0) %}
+                {% if lock and lock > 0 %}
+                    <span class="mono" style="color: var(--yellow);">#{{ lock }}</span>
+                {% else %}
+                    <span style="color: var(--text-muted);">---</span>
+                {% endif %}
+            </td>
         </tr>
     {% endfor %}
     </tbody>

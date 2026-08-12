@@ -24,3 +24,10 @@
         {% if stats.last_block_hash %}{{ stats.last_block_hash[:12] }}...{% else %}Genesis{% endif %}
     </span>
 </div>
+{% set burned = stats.get('total_burned', 0) %}
+{% if burned > 0 %}
+<div class="stat">
+    <span class="stat-label">Total Burned 🔥</span>
+    <span class="stat-value" style="color: var(--orange);">{{ "%.2f"|format(burned) }} SC</span>
+</div>
+{% endif %}

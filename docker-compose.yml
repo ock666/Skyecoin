@@ -11,6 +11,8 @@ services:
       - SKYECOIN_HOST=0.0.0.0
       - SKYECOIN_PORT=5000
       - SKYECOIN_DIFFICULTY=16
+      - SKYECOIN_POOL_ENABLED=true
+      - SKYECOIN_POOL_DIFFICULTY=8
 
   miner:
     build: .

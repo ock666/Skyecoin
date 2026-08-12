@@ -7,6 +7,7 @@
             <th>To</th>
             <th>Amount</th>
             <th>Fee</th>
+            <th>Fee/B</th>
         </tr>
     </thead>
     <tbody>
@@ -20,9 +21,16 @@
                     <span class="address">{{ tx.sender[:12] }}...</span>
                 {% endif %}
             </td>
-            <td><span class="address">{{ tx.recipient[:12] }}...</span></td>
+            <td>
+                {% if tx.recipient.startswith('BURN') %}
+                    <span class="badge burn">🔥 BURN</span>
+                {% else %}
+                    <span class="address">{{ tx.recipient[:12] }}...</span>
+                {% endif %}
+            </td>
             <td class="amount">{{ "%.6f"|format(tx.amount) }} SC</td>
             <td>{{ "%.6f"|format(tx.fee) }}</td>
+            <td><span class="mono">{{ "%.8f"|format(tx.fee / 250) }}</span></td>
         </tr>
     {% endfor %}
     </tbody>

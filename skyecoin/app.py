@@ -1,19 +1,22 @@
 import json
 import logging
 import asyncio
+import time
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect, Depends, Form
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 
 from skyecoin.config import Config, setup_logging
+from skyecoin.auth import hash_password, verify_password, is_authenticated, set_auth_cookie, clear_auth_cookie
 from skyecoin.storage import Database
 from skyecoin.chain import ChainManager
 from skyecoin.mempool import Mempool
 from skyecoin.network import NodeManager
 from skyecoin.events import event_bus
+from skyecoin.pool import PoolManager
 from skyecoin.api.schemas import (
     TransactionRequest,
     PeerRegisterRequest,
@@ -46,9 +49,109 @@ def create_app(config: Config) -> FastAPI:
     chain.initialize(wallet["address"], wallet["public_key"])
     nodes.start_discovery()
 
+    pool = PoolManager(db, chain, mempool, wallet, config, nodes) if config.pool_enabled else None
+
     web_dir = Path(__file__).parent / "web"
     app.mount("/static", StaticFiles(directory=str(web_dir / "static")), name="static")
     templates = Jinja2Templates(directory=str(web_dir / "templates"))
+
+    # =========================================================================
+    # Auth dependency
+    # =========================================================================
+
+    async def require_auth(request: Request):
+        if not is_authenticated(request):
+            db = request.app.state.db
+            if not db.has_users():
+                raise HTTPException(status_code=303, headers={"Location": "/setup"})
+            raise HTTPException(status_code=303, headers={"Location": "/login"})
+        return True
+
+    async def redirect_if_authenticated(request: Request):
+        if is_authenticated(request):
+            raise HTTPException(status_code=303, headers={"Location": "/"})
+        return True
+
+    async def require_setup(request: Request):
+        db = request.app.state.db
+        if db.has_users():
+            raise HTTPException(status_code=303, headers={"Location": "/login"})
+        return True
+
+    # =========================================================================
+    # Auth Routes
+    # =========================================================================
+
+    @app.get("/login", response_class=HTMLResponse, dependencies=[Depends(redirect_if_authenticated)])
+    async def login_page(request: Request, error: str = "", setup: str = ""):
+        return templates.TemplateResponse(request, "login.html", {
+            "error": error,
+            "setup": setup,
+        })
+
+    @app.post("/login")
+    async def login_post(request: Request):
+        form = await request.form()
+        password = form.get("password", "")
+        db = request.app.state.db
+
+        if not password:
+            return templates.TemplateResponse(request, "login.html", {
+                "error": "Password is required",
+                "setup": "",
+            })
+
+        pw_hash = db.get_password_hash()
+        if not pw_hash:
+            return RedirectResponse(url="/setup", status_code=303)
+
+        if not verify_password(password, pw_hash):
+            logger.warning("Failed login attempt from %s", request.client.host if request.client else "unknown")
+            return templates.TemplateResponse(request, "login.html", {
+                "error": "Invalid password",
+                "setup": "",
+            }, status_code=401)
+
+        response = RedirectResponse(url="/", status_code=303)
+        set_auth_cookie(response, config.session_secret)
+        logger.info("Successful login from %s", request.client.host if request.client else "unknown")
+        return response
+
+    @app.get("/logout")
+    async def logout(request: Request):
+        response = RedirectResponse(url="/login", status_code=303)
+        clear_auth_cookie(response)
+        return response
+
+    @app.get("/setup", response_class=HTMLResponse, dependencies=[Depends(require_setup)])
+    async def setup_page(request: Request, error: str = ""):
+        return templates.TemplateResponse(request, "setup.html", {
+            "error": error,
+        })
+
+    @app.post("/setup")
+    async def setup_post(request: Request):
+        db = request.app.state.db
+        if db.has_users():
+            return RedirectResponse(url="/login", status_code=303)
+
+        form = await request.form()
+        password = form.get("password", "")
+        confirm = form.get("confirm_password", "")
+
+        if not password or len(password) < 4:
+            return templates.TemplateResponse(request, "setup.html", {
+                "error": "Password must be at least 4 characters",
+            }, status_code=400)
+
+        if password != confirm:
+            return templates.TemplateResponse(request, "setup.html", {
+                "error": "Passwords do not match",
+            }, status_code=400)
+
+        db.set_password(hash_password(password))
+        logger.info("Admin password set successfully")
+        return RedirectResponse(url="/login?setup=Password+set+successfully.+Please+log+in.", status_code=303)
 
     # =========================================================================
     # WebSocket - Real-time events
@@ -82,9 +185,10 @@ def create_app(config: Config) -> FastAPI:
     # Web UI Routes
     # =========================================================================
 
-    @app.get("/", response_class=HTMLResponse)
+    @app.get("/", response_class=HTMLResponse, dependencies=[Depends(require_auth)])
     async def index(request: Request):
         stats = chain.get_chain_stats()
+        stats["total_burned"] = chain.get_total_burned()
         blocks = chain.get_recent_blocks(limit=10)
         w = dict(db.get_wallet())
         w["_balance"] = chain.get_balance(w["address"])
@@ -96,36 +200,37 @@ def create_app(config: Config) -> FastAPI:
             "wallet": w,
         })
 
-    @app.get("/views/stats", response_class=HTMLResponse)
+    @app.get("/views/stats", response_class=HTMLResponse, dependencies=[Depends(require_auth)])
     async def view_stats(request: Request):
         stats = chain.get_chain_stats()
         stats["peer_count"] = len(nodes.get_nodes())
+        stats["total_burned"] = chain.get_total_burned()
         return templates.TemplateResponse(request, "partials/stats.html", {
             "stats": stats,
         })
 
-    @app.get("/views/blocks", response_class=HTMLResponse)
+    @app.get("/views/blocks", response_class=HTMLResponse, dependencies=[Depends(require_auth)])
     async def view_blocks(request: Request, limit: int = 10):
         blocks = chain.get_recent_blocks(limit=limit)
         return templates.TemplateResponse(request, "partials/block_list.html", {
             "blocks": blocks,
         })
 
-    @app.get("/views/mempool", response_class=HTMLResponse)
+    @app.get("/views/mempool", response_class=HTMLResponse, dependencies=[Depends(require_auth)])
     async def view_mempool(request: Request):
         txs = mempool.get_all()
         return templates.TemplateResponse(request, "partials/mempool.html", {
             "mempool_txs": txs,
         })
 
-    @app.get("/views/peers", response_class=HTMLResponse)
+    @app.get("/views/peers", response_class=HTMLResponse, dependencies=[Depends(require_auth)])
     async def view_peers(request: Request):
         peers = nodes.get_nodes()
         return templates.TemplateResponse(request, "partials/peers.html", {
             "peers": peers,
         })
 
-    @app.get("/views/history/{address}", response_class=HTMLResponse)
+    @app.get("/views/history/{address}", response_class=HTMLResponse, dependencies=[Depends(require_auth)])
     async def view_history(request: Request, address: str, limit: int = 20):
         txs = chain.get_address_history(address, limit=limit)
         return templates.TemplateResponse(request, "partials/history.html", {
@@ -147,6 +252,7 @@ def create_app(config: Config) -> FastAPI:
             "last_block_hash": stats["last_block_hash"],
             "last_block_time": stats["last_block_time"],
             "total_transactions": stats["total_transactions"],
+            "total_burned": chain.get_total_burned(),
         }
 
     @app.get("/api/chain")
@@ -177,11 +283,16 @@ def create_app(config: Config) -> FastAPI:
     async def get_peers():
         return nodes.get_nodes()
 
+    @app.get("/api/peers/graph")
+    async def get_peer_graph():
+        return nodes.get_graph_data()
+
     @app.get("/api/difficulty")
     async def get_difficulty():
-        last = chain.get_last_block()
+        from skyecoin.mining.difficulty import calculate_difficulty
+        current = calculate_difficulty(chain.db, config)
         return {
-            "difficulty": last["difficulty"] if last else config.difficulty,
+            "difficulty": current,
             "block_time_target": config.target_block_time,
             "adjust_interval": config.difficulty_adjust_interval,
         }
@@ -198,6 +309,54 @@ def create_app(config: Config) -> FastAPI:
             "next_halving_at": ((halvings + 1) * config.halving_interval) if height > 0 else config.halving_interval,
             "lottery_bonus": config.lottery_bonus,
             "lottery_zeros_needed": config.min_lottery_zeros,
+        }
+
+    @app.get("/api/fees/estimate")
+    async def estimate_fees():
+        import json
+        all_txs = mempool.get_all()
+        if not all_txs:
+            def_fee_per_byte = config.fee_per_kb / 1000
+            return {
+                "economy": round(def_fee_per_byte, 8),
+                "normal": round(def_fee_per_byte * 2, 8),
+                "fast": round(def_fee_per_byte * 3, 8),
+                "mempool_txs": 0,
+                "mempool_kb": 0,
+            }
+
+        tx_fees = []
+        for tx in all_txs:
+            size = len(json.dumps(tx.to_dict(), sort_keys=True))
+            tx_fees.append((tx, tx.fee / size, size))
+
+        tx_fees.sort(key=lambda x: x[1], reverse=True)
+
+        cumulative_bytes = 0
+        thresholds = {"fast": 25_000, "normal": 75_000, "economy": 250_000}
+        estimates = {}
+
+        def_floor = config.fee_per_kb / 1000
+        for label, byte_target in thresholds.items():
+            cumulative = 0
+            fee_val = def_floor * {"fast": 3, "normal": 2, "economy": 1}[label]
+            for tx, fee_per_byte, size in tx_fees:
+                cumulative += size
+                if cumulative >= byte_target:
+                    fee_val = fee_per_byte
+                    break
+            else:
+                if tx_fees:
+                    fee_val = tx_fees[-1][1]
+            estimates[label] = round(fee_val, 8)
+
+        total_kb = round(sum(s for _, _, s in tx_fees) / 1000, 2)
+        return {
+            "economy": estimates["economy"],
+            "normal": estimates["normal"],
+            "fast": estimates["fast"],
+            "mempool_txs": len(all_txs),
+            "mempool_kb": total_kb,
         }
 
     @app.post("/api/transactions/new", response_model=MessageResponse)
@@ -298,6 +457,54 @@ def create_app(config: Config) -> FastAPI:
             return MessageResponse(message="Chain was updated from peers")
         return MessageResponse(message="Chain is already up to date")
 
+    # =========================================================================
+    # Pool Routes
+    # =========================================================================
+
+    @app.post("/pool/subscribe")
+    async def pool_subscribe(data: dict):
+        if not pool:
+            raise HTTPException(status_code=404, detail="Pool not enabled")
+        worker = data.get("address", "")
+        name = data.get("name", "")
+        if not worker:
+            raise HTTPException(status_code=400, detail="Worker address required")
+        return pool.subscribe_worker(worker, name)
+
+    @app.get("/pool/work")
+    async def pool_work():
+        if not pool:
+            raise HTTPException(status_code=404, detail="Pool not enabled")
+        return pool.get_work()
+
+    @app.post("/pool/submit")
+    async def pool_submit(data: dict):
+        if not pool:
+            raise HTTPException(status_code=404, detail="Pool not enabled")
+        worker = data.get("address", "")
+        nonce = data.get("nonce", 0)
+        timestamp = data.get("timestamp", time.time())
+        if not worker:
+            raise HTTPException(status_code=400, detail="Worker address required")
+        result = pool.submit_share(worker, int(nonce), float(timestamp))
+        if result.get("block_found"):
+            asyncio.create_task(event_bus.publish("block_mined", {
+                "block_index": result["block_index"],
+                "block_hash": result["block_hash"],
+                "miner_address": wallet["address"],
+                "tx_count": 0,
+                "nonce": nonce,
+                "difficulty": chain.get_chain_stats()["difficulty"],
+                "height": chain.get_chain_stats()["height"],
+            }))
+        return result
+
+    @app.get("/pool/stats")
+    async def pool_stats():
+        if not pool:
+            raise HTTPException(status_code=404, detail="Pool not enabled")
+        return pool.get_pool_stats()
+
     @app.get("/api/leaderboard")
     async def get_leaderboard():
         rows = db.fetchall("""
@@ -335,7 +542,7 @@ def create_app(config: Config) -> FastAPI:
             "balance": balance,
         }
 
-    @app.post("/api/wallet/generate")
+    @app.post("/api/wallet/generate", dependencies=[Depends(require_auth)])
     async def generate_wallet():
         priv_pem, pub_pem, address = generate_keypair()
         db.set_wallet(priv_pem, pub_pem, address)
@@ -385,6 +592,10 @@ def create_app(config: Config) -> FastAPI:
         last = chain.db.get_last_block()
         current_reward = chain.get_current_reward()
         total_txs = chain.db.fetchone("SELECT COUNT(*) as c FROM transactions")["c"]
+        total_burned = chain.get_total_burned()
+        total_burn_txs = chain.db.fetchone(
+            "SELECT COUNT(*) as c FROM transactions WHERE recipient LIKE 'BURN%'"
+        )["c"]
 
         badges = []
         badges.append({"name": "Genesis", "icon": "🌍", "earned": True, "desc": "Genesis block created"})
@@ -394,7 +605,7 @@ def create_app(config: Config) -> FastAPI:
         badges.append({"name": "Trader", "icon": "💸", "earned": total_txs > 1, "desc": "First transaction sent"})
         badges.append({"name": "Halving", "icon": "🪙", "earned": current_reward < 50.0, "desc": "Survived a halving"})
         badges.append({"name": "Whale", "icon": "🐋", "earned": chain.get_balance(wallet["address"]) >= 10000, "desc": "10,000 SC balance"})
-        badges.append({"name": "Burning", "icon": "🔥", "earned": False, "desc": "Burn some coins"})
+        badges.append({"name": "Burning", "icon": "🔥", "earned": total_burn_txs > 0, "desc": f"Burn some coins ({total_burned:.2f} SC burned)"})
         badges.append({"name": "Networker", "icon": "🌐", "earned": len(nodes.get_nodes()) > 0, "desc": "Connect to a peer"})
         badges.append({"name": "Lucky", "icon": "🍀", "earned": False, "desc": "Win a block lottery"})
         return {"badges": badges, "earned": sum(1 for b in badges if b["earned"])}
@@ -417,6 +628,7 @@ def create_app(config: Config) -> FastAPI:
     app.state.nodes = nodes
     app.state.config = config
     app.state.wallet = wallet
+    app.state.pool = pool
 
     return app
 

@@ -1,5 +1,6 @@
 import json
 import os
+import secrets
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -22,6 +23,10 @@ class Config:
     halving_interval: int = 2100
     lottery_bonus: float = 25.0
     min_lottery_zeros: int = 4
+    session_secret: str = ""
+    pool_enabled: bool = False
+    pool_difficulty: int = 8
+    pool_fee_percent: float = 1.0
 
     @classmethod
     def load(cls, path: Optional[str] = None) -> "Config":
@@ -36,6 +41,10 @@ class Config:
             "SKYECOIN_COINBASE_REWARD": ("coinbase_reward", float),
             "SKYECOIN_FEE_PER_KB": ("fee_per_kb", float),
             "SKYECOIN_MAX_PEERS": ("max_peers", int),
+            "SKYECOIN_SESSION_SECRET": "session_secret",
+            "SKYECOIN_POOL_ENABLED": ("pool_enabled", lambda x: x.lower() in ("1", "true", "yes")),
+            "SKYECOIN_POOL_DIFFICULTY": ("pool_difficulty", int),
+            "SKYECOIN_POOL_FEE_PERCENT": ("pool_fee_percent", float),
             "SKYECOIN_DATA_DIR": "data_dir",
             "SKYECOIN_DB_NAME": "db_name",
         }
@@ -57,6 +66,9 @@ class Config:
             for key, value in data.items():
                 if hasattr(cfg, key):
                     setattr(cfg, key, value)
+
+        if not cfg.session_secret:
+            cfg.session_secret = secrets.token_hex(32)
 
         return cfg
 

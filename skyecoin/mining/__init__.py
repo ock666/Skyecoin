@@ -60,3 +60,18 @@ def validate_proof(block: Block) -> bool:
         hashlib.sha256(header_hash.encode()).digest(), "big"
     )
     return hash_int < target
+
+
+def mine_range(block: Block, start_nonce: int, end_nonce: int) -> dict:
+    target = 2 ** (256 - block.difficulty)
+    pool_target = block.difficulty  # will be overridden by caller if needed
+    for nonce in range(start_nonce, end_nonce):
+        block.nonce = nonce
+        block.timestamp = time.time()
+        header_hash = block.header_hash()
+        hash_int = int.from_bytes(
+            hashlib.sha256(header_hash.encode()).digest(), "big"
+        )
+        if hash_int < target:
+            return {"found": True, "nonce": nonce, "timestamp": block.timestamp, "hash_int": hash_int}
+    return {"found": False}

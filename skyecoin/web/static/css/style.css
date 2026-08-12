@@ -51,6 +51,12 @@ header h1 .icon { font-size: 1.4em; }
     color: var(--text-muted);
 }
 
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
 .stats-bar {
     display: flex;
     gap: 24px;
@@ -205,6 +211,7 @@ tr:hover td { background: rgba(255,255,255,0.02); }
 .badge.coinbase { background: var(--orange); color: #fff; }
 .badge.pending { background: var(--yellow); color: #000; }
 .badge.confirmed { background: var(--green); color: #000; }
+.badge.burn { background: rgba(248,81,73,0.15); color: var(--red); border: 1px solid var(--red); }
 
 form {
     display: flex;
@@ -565,4 +572,62 @@ footer {
 @keyframes orphanPulse {
     from { opacity: 0.6; }
     to { opacity: 1; }
+}
+
+.login-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 60vh;
+    padding: 24px;
+}
+
+.login-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 32px;
+    width: 100%;
+    max-width: 420px;
+}
+
+.login-card h2 {
+    font-size: 1em;
+    color: var(--accent);
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.login-card form {
+    max-width: 100%;
+}
+
+.login-card button {
+    margin-top: 8px;
+    width: 100%;
+}
+
+.setup-info {
+    font-size: 0.8em;
+    color: var(--text-muted);
+    margin-bottom: 16px;
+    line-height: 1.5;
+}
+
+#peer-graph-container {
+    border-radius: var(--radius);
+    overflow: hidden;
+    background: var(--code-bg);
+}
+
+.peer-node-local {
+    filter: drop-shadow(0 0 8px rgba(63,185,80,0.5));
+    animation: peerPulse 2s ease-in-out infinite;
+}
+
+@keyframes peerPulse {
+    0%, 100% { filter: drop-shadow(0 0 6px rgba(63,185,80,0.4)); }
+    50% { filter: drop-shadow(0 0 14px rgba(63,185,80,0.7)); }
 }

@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Skyecoin — Initial Setup</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <header>
+        <h1><span class="icon">☄️</span> Skyecoin Explorer</h1>
+        <span class="node-info">Initial Setup</span>
+    </header>
+
+    <main>
+        <div class="login-container">
+            <div class="login-card">
+                <h2>🔑 Create Admin Password</h2>
+                <p class="setup-info">This is your first time running Skyecoin. Set an admin password to secure the dashboard.</p>
+                {% if error %}
+                <div class="flash error">{{ error }}</div>
+                {% endif %}
+                <form method="POST" action="/setup">
+                    <label>
+                        Password
+                        <input type="password" name="password" placeholder="Choose a strong password" required autofocus minlength="4">
+                    </label>
+                    <label>
+                        Confirm Password
+                        <input type="password" name="confirm_password" placeholder="Re-enter your password" required minlength="4">
+                    </label>
+                    <button type="submit">Set Password</button>
+                </form>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        Skyecoin Node — Initial Setup
+    </footer>
+</body>
+</html>

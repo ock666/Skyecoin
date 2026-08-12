@@ -20,6 +20,8 @@ class NodeManager:
         self._client = httpx.Client(timeout=10.0)
         self._running = True
         self._bootstrap_nodes = bootstrap_nodes or []
+        self._peer_stats: dict[str, dict] = {}
+        self._stats_lock = threading.Lock()
 
     def start_discovery(self):
         """Bootstrap into the network and start periodic peer discovery."""
@@ -72,6 +74,7 @@ class NodeManager:
                         (peer, stale_threshold),
                     )
                     self.db.commit()
+            self.fetch_peer_stats()
 
     def register_node(self, node_address: str) -> bool:
         if node_address == self.address:
@@ -88,6 +91,62 @@ class NodeManager:
     def get_nodes_with_data(self) -> list[dict]:
         rows = self.db.fetchall("SELECT address, last_seen FROM peers ORDER BY last_seen DESC")
         return [{"address": r["address"], "last_seen": r["last_seen"]} for r in rows]
+
+    def fetch_peer_stats(self):
+        for peer in list(self.get_nodes()):
+            try:
+                url = f"http://{peer}/api/stats"
+                resp = self._client.get(url)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    data["latency"] = resp.elapsed.total_seconds()
+                    data["last_fetch"] = time.time()
+                    with self._stats_lock:
+                        self._peer_stats[peer] = data
+            except Exception:
+                pass
+
+    def get_graph_data(self) -> dict:
+        peers = self.get_nodes_with_data()
+        now = time.time()
+        nodes = []
+        edges = []
+
+        nodes.append({
+            "id": self.address,
+            "label": "this node",
+            "status": "online",
+            "is_local": True,
+            "height": None,
+            "difficulty": None,
+            "latency": None,
+        })
+
+        for p in peers:
+            age = now - p["last_seen"]
+            status = "online" if age < 60 else ("slow" if age < 300 else "stale")
+            stats = {}
+            with self._stats_lock:
+                stats = self._peer_stats.get(p["address"], {})
+
+            nodes.append({
+                "id": p["address"],
+                "label": p["address"],
+                "status": status,
+                "is_local": False,
+                "height": stats.get("height"),
+                "difficulty": stats.get("difficulty"),
+                "latency": round(stats.get("latency", 0) * 1000) if stats.get("latency") else None,
+                "last_seen_seconds": round(age),
+            })
+
+            if status != "stale":
+                edges.append({
+                    "source": self.address,
+                    "target": p["address"],
+                })
+
+        return {"nodes": nodes, "edges": edges}
 
     def broadcast_block(self, block: Block) -> dict[str, str]:
         results = {}

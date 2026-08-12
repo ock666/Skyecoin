@@ -1,4 +1,5 @@
 import hashlib
+import json
 import logging
 from skyecoin.models.block import Block
 from skyecoin.models.transaction import Transaction
@@ -78,10 +79,21 @@ def validate_transaction_for_mempool(tx: Transaction, db: Database) -> tuple[boo
         return False, "Coinbase transactions cannot be submitted to mempool"
     if not tx.verify():
         return False, "Invalid transaction signature"
+
+    if tx.recipient.startswith("BURN"):
+        return True, ""
+
     available = db.get_balance(tx.sender)
     needed = tx.amount + tx.fee
     if available < needed:
         return False, f"Insufficient balance: have {available}, need {needed}"
+
+    from skyecoin.config import Config
+    tx_size_bytes = len(json.dumps(tx.to_dict(), sort_keys=True))
+    min_fee = (tx_size_bytes / 1000) * 0.25
+    if tx.fee < min_fee:
+        return False, f"Fee too low: {tx.fee:.6f} SC (minimum {min_fee:.6f} SC for {tx_size_bytes} bytes)"
+
     return True, ""
 
 

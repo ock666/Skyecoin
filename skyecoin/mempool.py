@@ -1,4 +1,5 @@
 import time
+import json
 import logging
 from skyecoin.models.transaction import Transaction, create_coinbase_transaction
 
@@ -22,7 +23,7 @@ class Mempool:
         self._transactions.pop(tx_hash, None)
 
     def get_transactions(self, max_count: int = 100) -> list[Transaction]:
-        txs = sorted(self._transactions.values(), key=lambda t: t.fee / max(t.amount, 1), reverse=True)
+        txs = sorted(self._transactions.values(), key=lambda t: t.fee / max(len(json.dumps(t.to_dict(), sort_keys=True)), 1), reverse=True)
         return txs[:max_count]
 
     def get_all(self) -> list[Transaction]:

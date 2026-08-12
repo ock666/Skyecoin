@@ -67,6 +67,12 @@ CREATE TABLE IF NOT EXISTS config (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    password_hash TEXT NOT NULL,
+    created_at REAL NOT NULL
+);
 """
 
 
@@ -82,6 +88,12 @@ class Database:
 
     def _init_schema(self):
         self.conn.executescript(SCHEMA)
+        try:
+            self.conn.execute(
+                "ALTER TABLE utxos ADD COLUMN lock_until_block INTEGER NOT NULL DEFAULT 0"
+            )
+        except sqlite3.OperationalError:
+            pass
         self.conn.commit()
 
     def execute(self, sql: str, params=()):
@@ -101,6 +113,22 @@ class Database:
 
     def close(self):
         self.conn.close()
+
+    def has_users(self) -> bool:
+        row = self.fetchone("SELECT COUNT(*) as c FROM users")
+        return row["c"] > 0 if row else False
+
+    def get_password_hash(self) -> Optional[str]:
+        row = self.fetchone("SELECT password_hash FROM users WHERE id = 1")
+        return row["password_hash"] if row else None
+
+    def set_password(self, password_hash: str):
+        import time
+        self.execute(
+            "INSERT OR REPLACE INTO users (id, password_hash, created_at) VALUES (1, ?, ?)",
+            (password_hash, time.time()),
+        )
+        self.commit()
 
     def get_block_count(self) -> int:
         row = self.fetchone("SELECT COUNT(*) as c FROM blocks")

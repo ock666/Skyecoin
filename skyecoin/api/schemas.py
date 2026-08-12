@@ -52,6 +52,15 @@ class StatsResponse(BaseModel):
     last_block_hash: Optional[str] = None
     last_block_time: Optional[float] = None
     total_transactions: int
+    total_burned: float = 0.0
+
+
+class FeeEstimateResponse(BaseModel):
+    economy: float
+    normal: float
+    fast: float
+    mempool_txs: int
+    mempool_kb: float
 
 
 class PeerRegisterRequest(BaseModel):
@@ -71,3 +80,12 @@ class WalletResponse(BaseModel):
     address: str
     public_key: str
     balance: float
+
+
+class LoginRequest(BaseModel):
+    password: str = Field(min_length=1)
+
+
+class SetupRequest(BaseModel):
+    password: str = Field(min_length=4)
+    confirm_password: str = Field(min_length=4)
