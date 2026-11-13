@@ -23,17 +23,17 @@ find "$DEST" -mindepth 1 -maxdepth 1 \
   -exec rm -rf {} +
 
 tar -C "$SRC" \
-  --exclude=.git \
-  --exclude=node_modules \
-  --exclude=dist \
-  --exclude=build \
-  --exclude=data \
-  --exclude=__pycache__ \
+  --exclude=./.git \
+  --exclude=./node_modules \
+  --exclude=./dist \
+  --exclude=./build \
+  --exclude=./data \
+  --exclude=./__pycache__ \
   --exclude='*.pyc' \
-  --exclude=.venv \
-  --exclude=venv \
-  --exclude=tests \
-  --exclude=.pytest_cache \
+  --exclude=./.venv \
+  --exclude=./venv \
+  --exclude=./tests \
+  --exclude=./.pytest_cache \
   --exclude='*.egg-info' \
   -cf - . | tar -C "$DEST" -xf -
 
