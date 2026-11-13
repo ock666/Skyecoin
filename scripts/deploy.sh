@@ -14,13 +14,17 @@ PROFILE="${4:-}"
 
 [ -d "$DEST" ] || { echo "deploy dir missing: $DEST"; exit 1; }
 
-# Replace tracked content but keep runtime-only files.
-find "$DEST" -mindepth 1 -maxdepth 1 \
-  ! -name .env \
-  ! -name .git \
-  ! -name docker-compose.override.yml \
-  ! -name scripts \
-  -exec rm -rf {} +
+# Clear the deploy dir as root in a throwaway container so files written by
+# other UIDs (app-side data syncs, previous root builds) can be replaced.
+docker run --rm -v "$DEST:/dest" alpine:3.20 sh -c '
+  cd /dest
+  for f in * .[!.]*; do
+    case "$f" in
+      .|..|.env|.git|docker-compose.override.yml|scripts) continue ;;
+    esac
+    rm -rf -- "$f"
+  done
+'
 
 tar -C "$SRC" \
   --exclude=./.git \
